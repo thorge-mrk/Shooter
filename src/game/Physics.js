@@ -38,9 +38,11 @@ export function resolveCylinderCollisions(pos, radius, height, colliders, ground
 }
 
 export function resolveCircleCollisionsXZ(pos, radius, colliders) {
+  const baseY = typeof pos.y === 'number' ? pos.y : 0;
   for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
     if (c.maxY < 0.25) continue;
+    if (c.exactMinY && c.minY > baseY + 2.2) continue;
 
     const closestX = Math.max(c.minX, Math.min(pos.x, c.maxX));
     const closestZ = Math.max(c.minZ, Math.min(pos.z, c.maxZ));

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TextureLibrary } from './Textures.js';
 import { buildArenaMap, MAP_CONFIGS } from './MapBuilder.js';
-import { createWeaponInventory, buildViewmodelMesh } from './Weapons.js';
+import { createWeaponInventory, buildViewmodelMesh, applyWeaponSkin } from './Weapons.js';
 import { ParticleSystem } from './Particles.js';
 import { TankSystem, TANK_CANNON_COOLDOWN_MS } from './TankSystem.js';
 import { GrenadeSystem } from './GrenadeSystem.js';
@@ -17,12 +17,13 @@ export class GameEngine {
     this.ui = ui;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.08, 340);
+    this.camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.08, 420);
     this.scene.add(this.camera);
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.06;
@@ -30,23 +31,7 @@ export class GameEngine {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    this.textures = new TextureLibrary();
-    this.particles = new ParticleSystem(this.scene);
-    this.tanks = new TankSystem(this.scene, this.textures, true);
-    this.grenades = new GrenadeSystem(this.scene, this.sound);
-    this.remotes = new RemotePlayerManager(this.scene, true);
-    this.bots = new BotManager(this.scene, true);
-    this.controller = new PlayerController(this.camera, this.renderer.domElement, (mode) => {
-      this.ui.applyInputMode(mode, this.controller.pointerLocked);
-    });
-
-    this.raycaster = new THREE.Raycaster();
-    this.viewmodelRoot = new THREE.Group();
-    this.camera.add(this.viewmodelRoot);
-    this.viewmodels = {};
-    this._initViewmodels();
-
-    // Performance & FPS
+    // Performance & Graphics Quality ('ultra' | 'balanced' | 'fast')
     this.quality = 'balanced';
     this.autoFps = true;
     this.fps = 60;
@@ -55,6 +40,29 @@ export class GameEngine {
     this.currentPixelRatio = 1.25;
     this.lowFpsStreak = 0;
     this.elapsedSec = 0;
+
+    // Loadout Customization
+    this.operatorId = 'vanguard';
+    this.skinId = 'factory';
+
+    this.textures = new TextureLibrary();
+    this.particles = new ParticleSystem(this.scene);
+    this.tanks = new TankSystem(this.scene, this.textures, true);
+    this.grenades = new GrenadeSystem(this.scene, this.sound);
+    this.remotes = new RemotePlayerManager(this.scene, true, this.textures, this.quality);
+    this.bots = new BotManager(this.scene, true);
+    this.controller = new PlayerController(this.camera, this.renderer.domElement, (mode) => {
+      this.ui.applyInputMode(mode, this.controller.pointerLocked);
+    });
+
+    this.raycaster = new THREE.Raycaster();
+    this.viewmodelRoot = new THREE.Group();
+    this.camera.add(this.viewmodelRoot);
+    this.viewmodelLight = new THREE.PointLight(0xfff5e6, 0.95, 2.4);
+    this.viewmodelLight.position.set(-0.14, 0.24, -0.15);
+    this.camera.add(this.viewmodelLight);
+    this.viewmodels = {};
+    this._initViewmodels();
 
     // Match state
     this.isRunning = false;
@@ -96,7 +104,8 @@ export class GameEngine {
     this.scoreboardHeld = false;
 
     this._bindControllerCallbacks();
-    this._applyQualitySettings();
+    this._applyQualitySettings(false);
+    this._loadMenuDiorama('harbor');
     window.addEventListener('resize', () => this._onResize());
     this._onResize();
 
@@ -106,11 +115,40 @@ export class GameEngine {
   }
 
   _initViewmodels() {
-    for (const id of ['rifle', 'shotgun', 'sniper', 'pistol', 'grenade']) {
-      const vm = buildViewmodelMesh(id);
+    for (const old of Object.values(this.viewmodels)) {
+      this.viewmodelRoot.remove(old);
+    }
+    this.viewmodels = {};
+    const specs = createWeaponInventory();
+    for (const item of specs) {
+      const id = item.spec.id;
+      const vm = buildViewmodelMesh(id, {
+        skinId: this.skinId,
+        operatorId: this.operatorId,
+        textureLib: this.textures,
+        quality: this.quality
+      });
+      vm.position.set(item.spec.hipPos[0], item.spec.hipPos[1], item.spec.hipPos[2]);
+      vm.rotation.y = 0.085;
       vm.visible = false;
       this.viewmodelRoot.add(vm);
       this.viewmodels[id] = vm;
+    }
+  }
+
+  setLoadout(operatorId, skinId) {
+    if (operatorId) this.operatorId = operatorId;
+    if (skinId) this.skinId = skinId;
+    for (const vm of Object.values(this.viewmodels)) {
+      applyWeaponSkin(vm, {
+        skinId: this.skinId,
+        operatorId: this.operatorId,
+        textureLib: this.textures,
+        quality: this.quality
+      });
+    }
+    if (this.isRunning && this.mode === 'multiplayer') {
+      this._syncLocalState(true);
     }
   }
 
@@ -131,26 +169,67 @@ export class GameEngine {
     };
   }
 
-  setQuality(quality, autoFps) {
-    this.quality = quality;
-    this.autoFps = autoFps;
-    this._applyQualitySettings();
+  setQuality(quality, autoFps = this.autoFps) {
+    const normalized = quality === 'high' ? 'ultra' : (quality || 'balanced');
+    const changed = this.quality !== normalized;
+    this.quality = normalized;
+    this.autoFps = Boolean(autoFps);
+    this._applyQualitySettings(changed);
   }
 
-  _applyQualitySettings() {
+  _applyQualitySettings(rebuildScene = false) {
     const dpr = window.devicePixelRatio || 1;
-    if (this.quality === 'high') {
-      this.currentPixelRatio = Math.min(dpr, 2.0);
+    if (this.quality === 'ultra' || this.quality === 'high') {
+      this.quality = 'ultra';
+      this.currentPixelRatio = Math.min(dpr, 2.5);
       this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.toneMappingExposure = 1.08;
     } else if (this.quality === 'balanced') {
       this.currentPixelRatio = Math.min(dpr, 1.35);
       this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.toneMappingExposure = 1.06;
     } else {
-      this.currentPixelRatio = 1.0;
+      this.quality = 'fast';
+      const hdRatio = 720 / Math.max(1, window.innerHeight || 720);
+      this.currentPixelRatio = Math.min(1.0, Math.max(0.65, hdRatio));
       this.renderer.shadowMap.enabled = false;
+      this.renderer.toneMappingExposure = 1.02;
     }
+
+    this.remotes.setQuality(this.quality);
+    this.bots.castShadows = this.quality !== 'fast';
+    this.tanks.castShadows = this.quality !== 'fast';
+
     this.renderer.setPixelRatio(this.currentPixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+    if (rebuildScene) {
+      this._initViewmodels();
+      this._updateViewmodelVisibility();
+      if (this.mapData) {
+        const activeMap = this.mapId || 'harbor';
+        this.mapData.dispose();
+        this.mapData = buildArenaMap(this.scene, this.textures, activeMap, this.quality);
+      }
+    }
+  }
+
+  _loadMenuDiorama(mapId = 'harbor') {
+    if (this.isRunning) return;
+    if (this.mapData) {
+      this.mapData.dispose();
+      this.mapData = null;
+    }
+    this.mapId = mapId;
+    this.mapData = buildArenaMap(this.scene, this.textures, mapId, this.quality);
+  }
+
+  previewMenuMap(mapId) {
+    if (!this.isRunning && mapId && mapId !== this.mapId) {
+      this._loadMenuDiorama(mapId);
+    }
   }
 
   _onResize() {
@@ -158,10 +237,22 @@ export class GameEngine {
     const h = window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.quality === 'fast') {
+      this.currentPixelRatio = Math.min(1.0, Math.max(0.65, 720 / Math.max(1, h)));
+      this.renderer.setPixelRatio(this.currentPixelRatio);
+    }
     this.renderer.setSize(w, h, false);
   }
 
-  startPracticeMatch({ mapId = 'harbor', botCount = 3, killLimit = 15, difficulty = 'tactical', playerName = 'Operator' }) {
+  startPracticeMatch({
+    mapId = 'harbor',
+    botCount = 3,
+    killLimit = 15,
+    difficulty = 'tactical',
+    playerName = 'Operator',
+    operatorId = this.operatorId,
+    skinId = this.skinId
+  }) {
     this._teardownMatch();
     this.mode = 'practice';
     this.mapId = mapId;
@@ -170,9 +261,10 @@ export class GameEngine {
     this.botDifficulty = difficulty;
     this.localId = 'local';
     this.localName = playerName || 'Operator';
+    this.setLoadout(operatorId, skinId);
 
     this._loadArena(mapId);
-    this.bots.spawnBots(botCount, this.mapData.config.spawns, difficulty);
+    this.bots.spawnBots(botCount, this.mapData.config.spawns, difficulty, this.textures, this.quality);
     this._spawnLocalPlayer(0);
 
     this.matchStartAt = Date.now();
@@ -247,7 +339,7 @@ export class GameEngine {
     this.inventory = createWeaponInventory();
     this.activeSlot = 0;
     this.reloading = false;
-    this.drawDrop = 0.22;
+    this.drawDrop = 0.02;
     this.ui.showEliminated(false);
     this._updateViewmodelVisibility();
   }
@@ -264,6 +356,7 @@ export class GameEngine {
 
   quitMatch() {
     this._teardownMatch();
+    this._loadMenuDiorama(this.mapId || 'harbor');
     this.ui.closeSettings();
     this.ui.showMenu();
   }
@@ -414,16 +507,41 @@ export class GameEngine {
       kills: this.kills,
       deaths: this.deaths,
       weapon: this.activeSlot,
-      inTankId: this.inTankId
+      inTankId: this.inTankId,
+      operatorId: this.operatorId,
+      skinId: this.skinId
     }, force);
+  }
+
+  handleSinglePlayerChange(uid, data) {
+    if (!uid || !data) return;
+    this.mpPlayers[uid] = data;
+    if (!this.isRunning || this.mode !== 'multiplayer') return;
+    this.remotes.upsertPlayer(uid, data, this.localId, this.network.getServerNow());
+    for (const tank of this.tanks.tanks) {
+      if (tank.driverId === uid && (data.inTankId !== tank.id || data.alive === false)) {
+        tank.driverId = '';
+      }
+    }
+    if (this.network.isHost && !this.roundEnded && (data.kills || 0) >= this.killLimit) {
+      this._endRound(data.name || 'Operator');
+    }
+  }
+
+  handleSinglePlayerRemove(uid) {
+    delete this.mpPlayers[uid];
+    if (!this.isRunning || this.mode !== 'multiplayer') return;
+    this.remotes.removePlayer(uid);
+    for (const tank of this.tanks.tanks) {
+      if (tank.driverId === uid) tank.driverId = '';
+    }
   }
 
   handleRemotePlayersUpdate(playersObj) {
     this.mpPlayers = playersObj || {};
     if (!this.isRunning || this.mode !== 'multiplayer') return;
-    this.remotes.syncSnapshot(this.mpPlayers, this.localId);
+    this.remotes.syncSnapshot(this.mpPlayers, this.localId, this.network.getServerNow());
 
-    // Ensure any tank whose previous driver now reports inTankId !== tank.id is cleanly released
     for (const tank of this.tanks.tanks) {
       if (tank.driverId && tank.driverId !== this.localId) {
         const dp = this.mpPlayers[tank.driverId];
@@ -453,7 +571,6 @@ export class GameEngine {
         tank.hp = tData.hp ?? tank.hp;
         tank.destroyed = tank.hp <= 0;
 
-        // Cross-check player snapshot so stale RTDB driverUid never locks a player inside a tank
         const candidateUid = tData.driverUid || '';
         const candidatePlayer = candidateUid ? this.mpPlayers[candidateUid] : null;
         const confirmedDriver = candidateUid && candidatePlayer && candidatePlayer.inTankId === tank.id && candidatePlayer.alive !== false
@@ -537,13 +654,12 @@ export class GameEngine {
       this.frameCount = 0;
       this.fpsAccum = 0;
 
-      if (this.autoFps && this.isRunning) {
+      if (this.autoFps && this.isRunning && this.quality !== 'fast') {
         if (this.fps < 33) {
           this.lowFpsStreak++;
           if (this.lowFpsStreak >= 2 && this.currentPixelRatio > 0.85) {
             this.currentPixelRatio = Math.max(0.85, this.currentPixelRatio - 0.2);
             this.renderer.setPixelRatio(this.currentPixelRatio);
-            if (this.currentPixelRatio <= 0.9) this.renderer.shadowMap.enabled = false;
           }
         } else {
           this.lowFpsStreak = 0;
@@ -551,16 +667,16 @@ export class GameEngine {
       }
     }
 
-    if (!this.isRunning) {
-      const t = now * 0.00018;
-      this.camera.position.set(Math.sin(t) * 28, 12, Math.cos(t) * 28);
-      this.camera.lookAt(0, 2, 0);
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
     if (this.mapData) {
       this.mapData.update(dt, this.elapsedSec);
+    }
+
+    if (!this.isRunning) {
+      const t = now * 0.00014;
+      this.camera.position.set(Math.sin(t) * 44, 15 + Math.sin(t * 1.7) * 2.5, Math.cos(t) * 44);
+      this.camera.lookAt(0, 3.5, 0);
+      this.renderer.render(this.scene, this.camera);
+      return;
     }
 
     if (!this.isPaused && !this.roundEnded) {
@@ -599,7 +715,6 @@ export class GameEngine {
       this.reloading = false;
     }
 
-    // Recover active weapon recoil 100% back to the original starting aim point once firing stops
     const activeFiring = this.controller.isFiring() && this.alive && this.inTankId < 0;
     this.controller.recoil.update(dt, activeFiring);
 
@@ -608,7 +723,6 @@ export class GameEngine {
     const isAds = this.alive && this.inTankId < 0 && this.controller.isAds();
     const terrainFn = this.mapData.terrainHeightFn;
 
-    // Substepped deterministic physics (max 1/60s per step) so 30 FPS mobile & 60/120 FPS PC behave identically
     const FIXED_STEP = 1 / 60;
     let remDt = dt;
     let substeps = 0;
@@ -765,10 +879,12 @@ export class GameEngine {
     const bobY = Math.abs(Math.sin(this.walkBobPhase)) * (moveMag > 0.1 ? (isAds ? 0.002 : 0.01) * moveMag : 0.002);
     const reloadTilt = this.reloading ? -0.52 : 0;
 
+    const targetYaw = isAds ? 0.0 : 0.085;
     vm.position.x += (target[0] + bobX - vm.position.x) * Math.min(1, dt * 16);
     vm.position.y += (target[1] - bobY - this.drawDrop - (this.reloading ? 0.09 : 0) - vm.position.y) * Math.min(1, dt * 16);
     vm.position.z += (target[2] + this.recoilOffset - vm.position.z) * Math.min(1, dt * 20);
     vm.rotation.x += (this.recoilOffset * 1.5 + reloadTilt - this.drawDrop * 1.2 - vm.rotation.x) * Math.min(1, dt * 16);
+    vm.rotation.y += (targetYaw - vm.rotation.y) * Math.min(1, dt * 16);
   }
 
   _handleOnFootFiring(nowMs, weaponState, isAds) {
@@ -798,7 +914,6 @@ export class GameEngine {
     this.sound.playShot(weaponState.spec.id, 1.0);
     this.vmFlashTimer = 0.055;
 
-    // Capture exact rendered crosshair aim ray BEFORE applying recoil kick
     const spread = isAds ? weaponState.spec.spreadAds : weaponState.spec.spreadHip;
     const { pitch: aimPitch, yaw: aimYaw } = this.controller.getEffectiveAngles();
     const origin = this.camera.position.clone();
@@ -864,7 +979,6 @@ export class GameEngine {
       }
     }
 
-    // Apply recoil kick to offset layer (automatically recovers 100% back to original aim when firing stops)
     this.recoilOffset = Math.min(0.085, this.recoilOffset + 0.034);
     const pitchKick = weaponState.spec.recoilPitch * (isAds ? 0.58 : 1);
     const yawKick = (Math.random() - 0.5) * 2 * weaponState.spec.recoilYaw * (isAds ? 0.6 : 1);
@@ -1031,6 +1145,7 @@ export class GameEngine {
   _damageBot(bot, damage, attackerId, weaponLabel) {
     if (!bot.alive) return;
     bot.hp -= damage;
+    if (bot.model) bot.model.flinchTimer = 0.22;
     if (bot.hp <= 0) {
       bot.hp = 0;
       bot.alive = false;
@@ -1129,7 +1244,7 @@ export class GameEngine {
         const muzzle = bot.pos.clone().add(new THREE.Vector3(0, -0.25, 0)).addScaledVector(dir, 0.75);
         const end = bot.pos.clone().addScaledVector(dir, bot.pos.distanceTo(target.pos));
         this.particles.spawnTracer(muzzle, end);
-        this.sound.playShot('rifle', Math.max(0.12, 1 - bot.pos.distanceTo(this.controller.pos) / 65));
+        this.sound.playShot('rifle', Math.max(0.12, 1 - bot.pos.distanceTo(this.controller.pos) / 85));
 
         if (Math.random() < cfg.hitChance) {
           if (target.id === this.localId && this.inTankId < 0) {
@@ -1148,7 +1263,7 @@ export class GameEngine {
         this.tanks.triggerBarrelRecoil(tank);
         const { origin, dir } = this.tanks.getCannonMuzzlePose(tank);
         this.tanks.spawnShell(origin, dir, bot.id, true);
-        this.sound.playTankCannon(Math.max(0.15, 1 - origin.distanceTo(this.controller.pos) / 85));
+        this.sound.playTankCannon(Math.max(0.15, 1 - origin.distanceTo(this.controller.pos) / 95));
       }
     });
   }
@@ -1233,7 +1348,9 @@ export class GameEngine {
         botCount: this.bots.bots.length,
         killLimit: this.killLimit,
         difficulty: this.botDifficulty,
-        playerName: this.localName
+        playerName: this.localName,
+        operatorId: this.operatorId,
+        skinId: this.skinId
       });
     } else if (this.network.isHost) {
       this.network.restartRound();

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { resolveCircleCollisionsXZ } from './Physics.js';
+import { createBeveledBox, createFlutedCylinder } from './GeometryUtils.js';
+import { createQualityMaterial } from './Textures.js';
 
 export const TANK_MAX_HP = 350;
 export const TANK_RESPAWN_MS = 18000;
@@ -15,25 +17,65 @@ function lerpAngle(current, target, alpha) {
 export class TankSystem {
   constructor(scene, textureLib, castShadows = true) {
     this.scene = scene;
+    this.textureLib = textureLib;
     this.tanks = [];
     this.shells = [];
     this.hitMeshes = [];
-
-    const armorTex = textureLib.getTextureSet('tankArmor', 2, 2, 2);
-    this.armorMat = new THREE.MeshStandardMaterial({
-      map: armorTex.map,
-      roughness: 0.54,
-      metalness: 0.34
-    });
-    this.darkMat = new THREE.MeshStandardMaterial({ color: 0x1b2128, roughness: 0.78, metalness: 0.25 });
-    this.barrelMat = new THREE.MeshStandardMaterial({ color: 0x2b323d, roughness: 0.36, metalness: 0.68 });
-    this.shellMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
-    this.shellGeo = new THREE.SphereGeometry(0.18, 8, 8);
+    this.quality = 'balanced';
     this.castShadows = castShadows;
+
+    this._rebuildMaterials();
+    this.shellMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+    this.shellGeo = new THREE.SphereGeometry(0.18, 10, 10);
+  }
+
+  _rebuildMaterials() {
+    const armorTex = this.textureLib.getTextureSet('tankArmor', 2, 2, this.quality === 'ultra' ? 8 : 2);
+    const steelTex = this.textureLib.getTextureSet('steel', 2, 2, this.quality === 'ultra' ? 8 : 2);
+
+    this.armorMat = createQualityMaterial({
+      map: armorTex.map,
+      normalMap: armorTex.normalMap,
+      roughnessMap: armorTex.roughnessMap,
+      roughness: 0.48,
+      metalness: 0.38,
+      clearcoat: 0.14
+    }, this.quality);
+
+    this.darkMat = createQualityMaterial({
+      color: 0x1b2128,
+      normalMap: steelTex.normalMap,
+      roughness: 0.76,
+      metalness: 0.32
+    }, this.quality);
+
+    this.barrelMat = createQualityMaterial({
+      color: 0x2b323d,
+      map: steelTex.map,
+      normalMap: steelTex.normalMap,
+      roughness: 0.32,
+      metalness: 0.76,
+      clearcoat: 0.22
+    }, this.quality);
+
+    this.opticMat = createQualityMaterial({
+      color: 0x0ea5e9,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.45,
+      roughness: 0.12,
+      metalness: 0.9,
+      clearcoat: 0.9
+    }, this.quality);
+  }
+
+  setQuality(quality) {
+    this.quality = quality;
+    this.castShadows = quality !== 'fast';
   }
 
   spawnTanks(pads) {
     this.clear();
+    this._rebuildMaterials();
     pads.forEach((pad, idx) => {
       const tank = this._createTankEntity(idx, pad);
       this.tanks.push(tank);
@@ -47,80 +89,142 @@ export class TankSystem {
     root.rotation.y = pad.yaw || 0;
 
     const hull = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.05, 5.1), this.armorMat);
-    body.position.set(0, 0.95, 0);
-    body.castShadow = this.castShadows;
-    body.receiveShadow = this.castShadows;
-    body.userData = { entityType: 'tank', tankId: id };
+    const tagTank = (mesh) => {
+      mesh.castShadow = this.castShadows;
+      mesh.receiveShadow = this.castShadows;
+      mesh.userData = { entityType: 'tank', tankId: id };
+      this.hitMeshes.push(mesh);
+      return mesh;
+    };
+
+    // Main Beveled Composite Hull
+    const body = tagTank(new THREE.Mesh(createBeveledBox(3.24, 1.04, 5.2, 0.08, 3), this.armorMat));
+    body.position.set(0, 0.96, 0);
     hull.add(body);
 
-    const glacis = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.55, 1.25), this.armorMat);
-    glacis.position.set(0, 1.02, -2.55);
-    glacis.rotation.x = 0.48;
-    glacis.userData = { entityType: 'tank', tankId: id };
+    // Sloped Front Glacis Plate + Lower Bow Armor
+    const glacis = tagTank(new THREE.Mesh(createBeveledBox(3.12, 0.54, 1.35, 0.06, 3), this.armorMat));
+    glacis.position.set(0, 1.04, -2.56);
+    glacis.rotation.x = 0.46;
     hull.add(glacis);
 
-    const trackL = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.95, 5.4), this.darkMat);
+    // Explosive Reactive Armor (ERA) Bricks on Front & Side Skirts
+    const eraGeo = createBeveledBox(0.46, 0.24, 0.14, 0.025, 2);
+    for (let i = -2; i <= 2; i++) {
+      const era = new THREE.Mesh(eraGeo, this.barrelMat);
+      era.position.set(i * 0.54, 1.16, -2.62);
+      era.rotation.x = 0.46;
+      hull.add(era);
+    }
+
+    // Heavy Tracks + Beveled Side Ballistic Skirts
+    const trackGeo = createBeveledBox(0.74, 0.92, 5.48, 0.07, 3);
+    const trackL = tagTank(new THREE.Mesh(trackGeo, this.darkMat));
     trackL.position.set(-1.76, 0.48, 0);
-    trackL.castShadow = this.castShadows;
-    trackL.userData = { entityType: 'tank', tankId: id };
-    hull.add(trackL);
-
-    const trackR = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.95, 5.4), this.darkMat);
+    const trackR = tagTank(new THREE.Mesh(trackGeo, this.darkMat));
     trackR.position.set(1.76, 0.48, 0);
-    trackR.castShadow = this.castShadows;
-    trackR.userData = { entityType: 'tank', tankId: id };
-    hull.add(trackR);
+    hull.add(trackL, trackR);
 
-    // Road wheels along tracks for crisp visual polish
-    for (let w = -2.0; w <= 2.0; w += 1.0) {
-      for (const sx of [-1.85, 1.85]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.58, 10), this.barrelMat);
+    const skirtGeo = createBeveledBox(0.14, 0.52, 4.95, 0.03, 2);
+    const skirtL = new THREE.Mesh(skirtGeo, this.armorMat);
+    skirtL.position.set(-2.14, 0.78, 0);
+    const skirtR = new THREE.Mesh(skirtGeo, this.armorMat);
+    skirtR.position.set(2.14, 0.78, 0);
+    hull.add(skirtL, skirtR);
+
+    // Rear Engine Louvers & Tow Shackles
+    const deckGrille = new THREE.Mesh(createBeveledBox(2.2, 0.12, 1.5, 0.03, 2), this.darkMat);
+    deckGrille.position.set(0, 1.48, 1.55);
+    hull.add(deckGrille);
+
+    // 6 Road Wheels + Drive Sprockets per side
+    for (let w = -2.1; w <= 2.1; w += 0.84) {
+      for (const sx of [-1.84, 1.84]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.58, 14), this.barrelMat);
         wheel.rotation.z = Math.PI / 2;
         wheel.position.set(sx, 0.36, w);
-        hull.add(wheel);
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.64, 10), this.darkMat);
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(sx, 0.36, w);
+        hull.add(wheel, hub);
       }
     }
 
+    // Sculpted Angular Turret
     const turret = new THREE.Group();
-    turret.position.set(0, 1.62, 0.1);
+    turret.position.set(0, 1.62, 0.08);
 
-    const turretBody = new THREE.Mesh(new THREE.BoxGeometry(2.38, 0.86, 3.1), this.armorMat);
-    turretBody.position.set(0, 0.35, 0.15);
-    turretBody.castShadow = this.castShadows;
-    turretBody.userData = { entityType: 'tank', tankId: id };
+    const turretBody = tagTank(new THREE.Mesh(createBeveledBox(2.42, 0.86, 3.18, 0.09, 3), this.armorMat));
+    turretBody.position.set(0, 0.36, 0.15);
     turret.add(turretBody);
 
+    // Angled Turret Cheeks (Abrams/Leopard 2 style)
+    const cheekGeo = createBeveledBox(0.95, 0.78, 1.15, 0.06, 2);
+    const cheekL = tagTank(new THREE.Mesh(cheekGeo, this.armorMat));
+    cheekL.position.set(-0.74, 0.36, -1.25);
+    cheekL.rotation.y = 0.28;
+    const cheekR = tagTank(new THREE.Mesh(cheekGeo, this.armorMat));
+    cheekR.position.set(0.74, 0.36, -1.25);
+    cheekR.rotation.y = -0.28;
+    turret.add(cheekL, cheekR);
+
+    // Commander Cupola + CITV Thermal Sight + Smoke Grenade Launchers
+    const cupola = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.28, 14), this.barrelMat);
+    cupola.position.set(0.58, 0.88, 0.35);
+    const citvOptic = new THREE.Mesh(createBeveledBox(0.32, 0.26, 0.32, 0.04, 2), this.opticMat);
+    citvOptic.position.set(-0.56, 0.9, -0.35);
+    turret.add(cupola, citvOptic);
+
+    for (const side of [-1, 1]) {
+      for (let s = 0; s < 3; s++) {
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.32, 8), this.darkMat);
+        tube.position.set(side * 1.24, 0.42 + s * 0.12, -0.65 - s * 0.08);
+        tube.rotation.x = 0.65;
+        tube.rotation.z = side * -0.22;
+        turret.add(tube);
+      }
+    }
+
+    // 120mm Smoothbore Cannon + Bore Evacuator (Fume Extractor) + Muzzle Reference Sensor
     const cannonPivot = new THREE.Group();
     cannonPivot.position.set(0, 0.38, -1.35);
     const cannonSlide = new THREE.Group();
-    const cannonBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.135, 3.6, 12), this.barrelMat);
+
+    const mantlet = new THREE.Mesh(createBeveledBox(0.68, 0.56, 0.54, 0.06, 2), this.darkMat);
+    mantlet.position.set(0, 0, -0.1);
+    cannonSlide.add(mantlet);
+
+    const cannonBarrel = new THREE.Mesh(createFlutedCylinder(0.115, 0.14, 3.68, 16, 6, 8, 0.005), this.barrelMat);
     cannonBarrel.rotation.x = Math.PI / 2;
-    cannonBarrel.position.set(0, 0, -1.7);
+    cannonBarrel.position.set(0, 0, -1.78);
     cannonBarrel.castShadow = this.castShadows;
     cannonSlide.add(cannonBarrel);
 
-    const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 12), this.darkMat);
-    muzzleBrake.rotation.x = Math.PI / 2;
-    muzzleBrake.position.set(0, 0, -3.55);
+    const evacuator = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.175, 0.68, 14), this.armorMat);
+    evacuator.rotation.x = Math.PI / 2;
+    evacuator.position.set(0, 0, -1.65);
+    cannonSlide.add(evacuator);
+
+    const muzzleBrake = new THREE.Mesh(createBeveledBox(0.32, 0.28, 0.42, 0.04, 2), this.darkMat);
+    muzzleBrake.position.set(0, 0, -3.62);
     cannonSlide.add(muzzleBrake);
+
     cannonPivot.add(cannonSlide);
     turret.add(cannonPivot);
 
-    const coax = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8), this.darkMat);
+    // Coaxial 7.62mm MG
+    const coax = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 1.15, 10), this.darkMat);
     coax.rotation.x = Math.PI / 2;
-    coax.position.set(0.45, 0.36, -1.65);
+    coax.position.set(0.42, 0.36, -1.72);
     turret.add(coax);
 
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), beaconMat);
-    beacon.position.set(-0.55, 0.92, 0.55);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), beaconMat);
+    beacon.position.set(-0.58, 0.96, 0.65);
     turret.add(beacon);
 
     root.add(hull);
     root.add(turret);
-
-    this.hitMeshes.push(body, glacis, trackL, trackR, turretBody);
 
     return {
       id,
@@ -230,7 +334,6 @@ export class TankSystem {
     tank.root.position.set(tank.x, groundY, tank.z);
     tank.root.rotation.y = tank.yaw;
 
-    // Gentle hull pitch/roll on hills
     if (terrainHeightFn) {
       const fwdX = -Math.sin(tank.yaw);
       const fwdZ = -Math.cos(tank.yaw);
@@ -388,9 +491,10 @@ export class TankSystem {
 
   dispose() {
     this.clear();
-    this.armorMat.dispose();
-    this.darkMat.dispose();
-    this.barrelMat.dispose();
+    this.armorMat?.dispose();
+    this.darkMat?.dispose();
+    this.barrelMat?.dispose();
+    this.opticMat?.dispose();
     this.shellMat.dispose();
     this.shellGeo.dispose();
   }

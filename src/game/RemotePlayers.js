@@ -1,15 +1,22 @@
 import * as THREE from 'three';
-import { buildSoldierMesh, animateSoldierModel } from './SoldierMesh.js';
+import { buildSoldierMesh, applySoldierSkin, animateSoldierModel } from './SoldierMesh.js';
 import { NetSnapshotBuffer, lerpAngle } from './NetSnapshotBuffer.js';
 
 const TEAM_COLORS = [0x3b82f6, 0xef4444, 0x10b981, 0xf59e0b, 0xa855f7];
 
 export class RemotePlayerManager {
-  constructor(scene, castShadows = true) {
+  constructor(scene, castShadows = true, textureLib = null, quality = 'balanced') {
     this.scene = scene;
     this.castShadows = castShadows;
+    this.textureLib = textureLib;
+    this.quality = quality;
     this.remotes = new Map();
     this.colorIndex = 0;
+  }
+
+  setQuality(quality) {
+    this.quality = quality;
+    this.castShadows = quality !== 'fast';
   }
 
   upsertPlayer(uid, data, localUid, serverNowMs) {
@@ -27,16 +34,27 @@ export class RemotePlayerManager {
       pitch: data.pitch || 0
     };
 
+    const operatorId = data.operatorId || 'vanguard';
+    const skinId = data.skinId || 'factory';
+
     let entity = this.remotes.get(uid);
     if (!entity) {
       const color = TEAM_COLORS[this.colorIndex++ % TEAM_COLORS.length];
-      const model = buildSoldierMesh(uid, data.name || 'Operator', color, this.castShadows);
+      const model = buildSoldierMesh(uid, data.name || 'Operator', color, this.castShadows, {
+        operatorId,
+        skinId,
+        color,
+        textureLib: this.textureLib,
+        quality: this.quality
+      });
       this.scene.add(model.root);
       const buffer = new NetSnapshotBuffer(95);
       buffer.push(snap);
       entity = {
         uid,
         data: { ...data },
+        operatorId,
+        skinId,
         model,
         buffer,
         currentPos: new THREE.Vector3(snap.x, snap.y, snap.z),
@@ -49,6 +67,11 @@ export class RemotePlayerManager {
       const nextInTank = typeof data.inTankId === 'number' && data.inTankId >= 0;
       const prevAlive = entity.data.alive !== false;
       const nextAlive = data.alive !== false;
+
+      if (entity.skinId !== skinId && this.textureLib) {
+        entity.skinId = skinId;
+        applySoldierSkin(entity.model, skinId, this.textureLib, this.quality);
+      }
 
       entity.data = { ...data };
       const jumpDist = Math.hypot(snap.x - entity.currentPos.x, snap.z - entity.currentPos.z);
@@ -127,7 +150,14 @@ export class RemotePlayerManager {
       const netSpeed = Math.hypot(sampled.vx || 0, sampled.vz || 0);
       const animSpeed = Math.max(frameSpeed, netSpeed * 0.75);
 
-      animateSoldierModel(entity.model, dt, animSpeed, entity.currentPitch, animSpeed > 0.35);
+      animateSoldierModel(
+        entity.model,
+        dt,
+        animSpeed,
+        entity.currentPitch,
+        entity.model.flashTimer > 0,
+        { crouchAmount: entity.data.crouch || 0 }
+      );
     }
   }
 

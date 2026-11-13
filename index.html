@@ -195,12 +195,20 @@
   <div id="menu-overlay" class="menu-overlay">
     <div class="menu-shell">
       <header class="menu-header">
-        <h1>PROJECT COLDBORE</h1>
-        <p class="menu-sub">2–5 Player Tactical FPS &amp; Armored Arena</p>
+        <div class="menu-brand">
+          <h1>PROJECT COLDBORE</h1>
+          <p class="menu-sub">2–5 Player Photorealistic Tactical FPS &amp; Armored Arena</p>
+        </div>
+        <div class="graphics-tier-bar" id="menu-graphics-bar" role="group" aria-label="Graphics Tier">
+          <span class="tier-bar-label">GRAPHICS:</span>
+          <button type="button" class="tier-btn" data-quality="ultra">ULTRA 4K</button>
+          <button type="button" class="tier-btn active" data-quality="balanced">HIGH (BALANCED)</button>
+          <button type="button" class="tier-btn" data-quality="fast">HD PERFORMANCE</button>
+        </div>
       </header>
 
       <div class="menu-grid">
-        <!-- Left Column: Account & Solo Practice -->
+        <!-- Column 1: Solo Practice & Deployment -->
         <section class="panel menu-card">
           <div class="card-head">
             <h2>SOLO DEPLOYMENT</h2>
@@ -227,11 +235,11 @@
 
           <div class="section-sep">PRACTICE VS AI</div>
           <div class="form-row">
-            <label for="practice-map">Arena</label>
+            <label for="practice-map">Theater / Arena (230m–250m Scale)</label>
             <select id="practice-map">
-              <option value="harbor">Sunlit Cargo Harbor (Sunset Port)</option>
-              <option value="desert">Desert Dunes &amp; Outpost (Hills)</option>
-              <option value="snow">Alpine Snow Peaks (Snowfall)</option>
+              <option value="harbor">Sunlit Cargo Harbor (Moving Ship, Beach &amp; Forklifts)</option>
+              <option value="desert">Sunken Desert Temple (Sculptures, Vases &amp; Columns)</option>
+              <option value="snow">Alpine Glacier Viaduct (Snowcats, Bridges &amp; Snowfall)</option>
             </select>
           </div>
           <div class="form-row three-col">
@@ -245,11 +253,11 @@
               </select>
             </div>
             <div>
-              <label for="practice-difficulty">Bot Skill</label>
+              <label for="practice-difficulty">AI Tactical Skill</label>
               <select id="practice-difficulty">
-                <option value="casual">Casual</option>
-                <option value="tactical" selected>Tactical</option>
-                <option value="veteran">Veteran</option>
+                <option value="casual">Casual (Relaxed)</option>
+                <option value="tactical" selected>Tactical (Cover &amp; Burst)</option>
+                <option value="veteran">Veteran (Flank &amp; Peek)</option>
               </select>
             </div>
             <div>
@@ -264,7 +272,55 @@
           <button class="btn-primary full-width" id="btn-start-practice">PLAY PRACTICE</button>
         </section>
 
-        <!-- Right Column: Multiplayer -->
+        <!-- Column 2: Interactive 3D Operator & Armory Bay -->
+        <section class="panel menu-card armory-card">
+          <div class="card-head">
+            <h2>OPERATOR &amp; ARMORY BAY</h2>
+            <span class="armory-tag" id="armory-active-tag">VANGUARD · FACTORY</span>
+          </div>
+
+          <div class="preview-viewport-wrap">
+            <canvas id="loadout-preview-canvas" width="420" height="210"></canvas>
+            <div class="preview-tabs" id="preview-target-tabs">
+              <button type="button" class="p-tab active" data-target="operator">OPERATOR</button>
+              <button type="button" class="p-tab" data-target="rifle">M4A1</button>
+              <button type="button" class="p-tab" data-target="shotgun">M1014</button>
+              <button type="button" class="p-tab" data-target="sniper">AWP</button>
+              <button type="button" class="p-tab" data-target="pistol">USP-S</button>
+            </div>
+          </div>
+
+          <div class="form-row two-col" style="margin-top: 10px;">
+            <div>
+              <label for="loadout-operator">Operator Rig (6 Classes)</label>
+              <select id="loadout-operator">
+                <option value="vanguard" selected>VANGUARD (Heavy Assault)</option>
+                <option value="spectre">SPECTRE (Recon Marksman)</option>
+                <option value="nomad">NOMAD (Desert Specialist)</option>
+                <option value="frost">FROST (Alpine Arctic)</option>
+                <option value="corsair">CORSAIR (Harbor Breacher)</option>
+                <option value="titan">TITAN (Armored EOD)</option>
+              </select>
+            </div>
+            <div>
+              <label for="loadout-skin">Blueprint Skin (10 Finishes)</label>
+              <select id="loadout-skin">
+                <option value="factory" selected>Factory Tactical (Parkerized)</option>
+                <option value="carbon">Forged Carbon (2x2 Twill)</option>
+                <option value="desert_viper">Desert Viper (Arid Camo)</option>
+                <option value="arctic_wolf">Arctic Wolf (Splinter Snow)</option>
+                <option value="abyssal">Abyssal Maritime (Naval Spec)</option>
+                <option value="woodland">Woodland Stalker (Forest)</option>
+                <option value="ceramic">Ballistic Cermet (White Hex)</option>
+                <option value="crimson">Crimson Vanguard (Anodized)</option>
+                <option value="cobalt">Cobalt Prototype (PVD Blue)</option>
+                <option value="damascus">Damascus Valor (Folded Steel)</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- Column 3: Multiplayer Lobby -->
         <section class="panel menu-card">
           <div class="card-head">
             <h2>MULTIPLAYER LOBBY (2–5)</h2>
@@ -277,8 +333,8 @@
                 <label for="mp-map">Arena</label>
                 <select id="mp-map">
                   <option value="harbor">Sunlit Cargo Harbor</option>
-                  <option value="desert">Desert Dunes &amp; Outpost</option>
-                  <option value="snow">Alpine Snow Peaks</option>
+                  <option value="desert">Sunken Desert Temple</option>
+                  <option value="snow">Alpine Glacier Viaduct</option>
                 </select>
               </div>
               <div>
@@ -329,17 +385,17 @@
   <div id="settings-modal" class="modal-backdrop hidden">
     <div class="panel modal-panel">
       <div class="panel-header">
-        <h2>SETTINGS</h2>
+        <h2>SETTINGS &amp; GRAPHICS</h2>
         <button class="close-btn" id="btn-close-settings">&times;</button>
       </div>
 
       <div class="settings-body">
         <div class="form-row">
-          <label for="setting-quality">Graphics Preset</label>
+          <label for="setting-quality">Graphics Preset (3 Tiers — Live Switchable)</label>
           <select id="setting-quality">
-            <option value="high">High (Full Resolution + Sharp Shadows)</option>
-            <option value="balanced" selected>Balanced (60 FPS Recommended)</option>
-            <option value="fast">Fast (Maximum Frame Rate)</option>
+            <option value="ultra">ULTRA 4K (Native 4K · Clearcoat PBR · 4096px Shadows · 100% Details)</option>
+            <option value="balanced" selected>HIGH (BALANCED) (FHD/QHD · Standard PBR · 1024px Shadows · 75% Vegetation)</option>
+            <option value="fast">HD PERFORMANCE (LOW DETAILS) (720p HD · Lambert Shaders · No Shadows · Max FPS)</option>
           </select>
         </div>
 

@@ -59,6 +59,12 @@ export class UIManager {
       btnStartMpMatch: document.getElementById('btn-start-mp-match'),
       wrWaitNote: document.getElementById('wr-wait-note'),
 
+      armoryActiveTag: document.getElementById('armory-active-tag'),
+      loadoutOperator: document.getElementById('loadout-operator'),
+      loadoutSkin: document.getElementById('loadout-skin'),
+      previewTabs: Array.from(document.querySelectorAll('#preview-target-tabs .p-tab')),
+      tierButtons: Array.from(document.querySelectorAll('#menu-graphics-bar .tier-btn')),
+
       settingsModal: document.getElementById('settings-modal'),
       btnQuitMatch: document.getElementById('btn-quit-match'),
       settingQuality: document.getElementById('setting-quality'),
@@ -71,6 +77,25 @@ export class UIManager {
 
     this.hitmarkerTimer = null;
     this.damageTimer = null;
+  }
+
+  syncQualityControls(quality) {
+    const q = quality === 'high' ? 'ultra' : (quality || 'balanced');
+    if (this.el.settingQuality) {
+      this.el.settingQuality.value = q;
+    }
+    if (this.el.tierButtons) {
+      this.el.tierButtons.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.quality === q);
+      });
+    }
+  }
+
+  updateArmoryTag(operatorId, skinId) {
+    if (!this.el.armoryActiveTag) return;
+    const opLabel = String(operatorId || 'vanguard').toUpperCase();
+    const skinLabel = String(skinId || 'factory').replace(/_/g, ' ').toUpperCase();
+    this.el.armoryActiveTag.textContent = `${opLabel} · ${skinLabel}`;
   }
 
   showMenu() {
