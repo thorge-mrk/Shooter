@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "rooms": {
+      ".read": "auth != null",
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid) || (!newData.exists() && !data.child('players').hasChildren()))",
+        "mapId": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid"
+        },
+        "killLimit": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid"
+        },
+        "durationSec": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid"
+        },
+        "status": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid"
+        },
+        "roundStartAt": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid"
+        },
+        "players": {
+          "$uid": {
+            ".write": "auth != null && (auth.uid === $uid || data.parent().parent().child('hostUid').val() === auth.uid)"
+          }
+        },
+        "tanks": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid",
+          "$tankId": {
+            ".write": "auth != null && data.parent().parent().child('players/' + auth.uid).exists()"
+          }
+        },
+        "events": {
+          ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid",
+          "$eventId": {
+            ".write": "auth != null && data.parent().parent().child('players/' + auth.uid).exists() && (!newData.exists() || newData.child('senderUid').val() === auth.uid)"
+          }
+        }
+      }
+    }
+  }
+}
