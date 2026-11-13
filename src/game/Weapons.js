@@ -237,50 +237,60 @@ export const WEAPON_GRIP_CONFIG = {
   rifle: {
     rightHandPos: [0, -0.055, 0.08],
     rightHandRot: [-0.24, -0.08, 0.14],
-    rightElbowPos: [0.12, -0.14, 0.24],
+    rightElbowPos: [0.18, -0.16, 0.19],
+    rightShoulderPos: [0.28, -0.15, 0.32],
     leftHandPos: [-0.015, -0.015, -0.22],
     leftHandRot: [0.06, 0.22, -0.32],
-    leftElbowPos: [-0.15, -0.14, 0.14],
+    leftElbowPos: [-0.27, -0.17, 0.09],
+    leftShoulderPos: [-0.36, -0.15, 0.30],
     leftGripStyle: 'cclamp',
     triggerReach: [0.005, 0.02, -0.042]
   },
   shotgun: {
     rightHandPos: [0, -0.055, 0.08],
     rightHandRot: [-0.24, -0.08, 0.14],
-    rightElbowPos: [0.12, -0.14, 0.24],
+    rightElbowPos: [0.18, -0.16, 0.19],
+    rightShoulderPos: [0.28, -0.15, 0.32],
     leftHandPos: [-0.012, -0.02, -0.20],
     leftHandRot: [0.05, 0.18, -0.26],
-    leftElbowPos: [-0.15, -0.14, 0.14],
+    leftElbowPos: [-0.27, -0.17, 0.09],
+    leftShoulderPos: [-0.36, -0.15, 0.30],
     leftGripStyle: 'cclamp',
     triggerReach: [0.005, 0.02, -0.042]
   },
   sniper: {
     rightHandPos: [0, -0.055, 0.08],
     rightHandRot: [-0.22, -0.08, 0.12],
-    rightElbowPos: [0.12, -0.14, 0.24],
+    rightElbowPos: [0.18, -0.16, 0.19],
+    rightShoulderPos: [0.28, -0.15, 0.32],
     leftHandPos: [-0.015, -0.018, -0.25],
     leftHandRot: [0.06, 0.2, -0.28],
-    leftElbowPos: [-0.15, -0.14, 0.14],
+    leftElbowPos: [-0.27, -0.17, 0.09],
+    leftShoulderPos: [-0.36, -0.15, 0.30],
     leftGripStyle: 'cclamp',
     triggerReach: [0.005, 0.02, -0.042]
   },
   pistol: {
     rightHandPos: [0, -0.055, 0.08],
     rightHandRot: [-0.2, -0.06, 0.1],
-    rightElbowPos: [0.12, -0.14, 0.24],
+    rightElbowPos: [0.18, -0.16, 0.19],
+    rightShoulderPos: [0.28, -0.15, 0.32],
     leftHandPos: [-0.018, -0.045, 0.055],
     leftHandRot: [-0.16, 0.28, -0.18],
-    leftElbowPos: [-0.15, -0.14, 0.14],
+    leftElbowPos: [-0.23, -0.17, 0.14],
+    leftShoulderPos: [-0.36, -0.15, 0.30],
     leftGripStyle: 'pistolSupport',
     triggerReach: [0.004, 0.022, -0.044]
   },
   grenade: {
     rightHandPos: [0, -0.055, 0.08],
     rightHandRot: [0.08, -0.14, 0.18],
-    rightElbowPos: [0.12, -0.14, 0.24],
+    rightElbowPos: [0.18, -0.16, 0.19],
+    rightShoulderPos: [0.28, -0.15, 0.32],
     leftHandPos: [-0.06, -0.02, -0.06],
     leftHandRot: [0.14, 0.34, -0.22],
-    leftElbowPos: [-0.15, -0.14, 0.14],
+    leftElbowPos: [-0.23, -0.17, 0.14],
+    leftShoulderPos: [-0.36, -0.15, 0.30],
     leftGripStyle: 'grenadePin',
     triggerReach: [0.006, 0.024, -0.036]
   }
@@ -375,6 +385,60 @@ function blendHexColors(hexA, hexB, t = 0.5) {
   return cA;
 }
 
+let _ripstopWeaveTex = null;
+function getRipstopSleeveTexture() {
+  if (_ripstopWeaveTex || typeof document === 'undefined') return _ripstopWeaveTex;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Neutral-light woven Cordura/Ripstop base so tint multiplier preserves operator sleeve color accurately
+  ctx.fillStyle = '#e5e7eb';
+  ctx.fillRect(0, 0, size, size);
+
+  // Subtle horizontal & vertical twill ripstop grid
+  for (let y = 0; y < size; y += 8) {
+    ctx.fillStyle = y % 16 === 0 ? 'rgba(0,0,0,0.09)' : 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0, y, size, 1.5);
+  }
+  for (let x = 0; x < size; x += 8) {
+    ctx.fillStyle = x % 16 === 0 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)';
+    ctx.fillRect(x, 0, 1.5, size);
+  }
+
+  // Fine diagonal combat twill threads
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = -size; i < size * 2; i += 6) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + size * 0.5, size);
+    ctx.stroke();
+  }
+
+  // Soft transverse sleeve crease folds
+  for (const fy of [54, 118, 178, 224]) {
+    const grad = ctx.createLinearGradient(0, fy - 12, 0, fy + 12);
+    grad.addColorStop(0, 'rgba(0,0,0,0.0)');
+    grad.addColorStop(0.45, 'rgba(0,0,0,0.16)');
+    grad.addColorStop(0.62, 'rgba(255,255,255,0.09)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, fy - 12, size, 24);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  _ripstopWeaveTex = tex;
+  return tex;
+}
+
 function resolveOperatorProfile(operatorId = 'vanguard') {
   if (!operatorId) return OPERATOR_ARM_PROFILES.vanguard;
   if (typeof operatorId === 'object' && operatorId.id) {
@@ -422,42 +486,47 @@ function buildRoleMaterials({ skinId = 'factory', operatorId = 'vanguard', textu
     ? skinSpec.emissive
     : '#ff3b30';
 
+  const isTextileSkin =
+    skinSpec.id === 'desert_camo' ||
+    skinSpec.id === 'woodland' ||
+    skinSpec.id === 'arctic_camo';
+
   // 1. PRIMARY: Upper/Lower receiver, slide, or main chassis — gets primary 256x256 custom skin texture
   const primaryMat = createQualityMaterial({
     color: skinTex?.map ? 0xffffff : skinSpec.primary,
     map: skinTex?.map || null,
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.95, 0.95),
+    normalScale: new THREE.Vector2(0.42, 0.42),
     roughnessMap: skinTex?.roughnessMap || null,
     roughness: skinSpec.roughness,
     metalness: skinSpec.metalness,
     clearcoat: skinSpec.clearcoat,
-    clearcoatRoughness: 0.24,
+    clearcoatRoughness: 0.32,
     emissive: skinSpec.emissive || '#000000',
     emissiveMap: skinTex?.emissiveMap || null,
     emissiveIntensity: (skinSpec.emissiveIntensity || 0) * (skinTex?.emissiveMap ? 0.85 : 0.12)
   }, quality);
 
   // 2. SECONDARY / ACCENT: Handguard rails, bolt carrier, mag baseplate, stock cheek rest —
-  // gets contrasting two-tone gunsmith secondary/accent metallic finish
+  // gets contrasting two-tone gunsmith secondary/accent Cerakote/anodized metallic finish
   const secondaryMat = createQualityMaterial({
     color: skinSpec.secondary,
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.55, 0.55),
+    normalScale: new THREE.Vector2(0.32, 0.32),
     roughnessMap: skinTex?.roughnessMap || null,
-    roughness: Math.min(0.76, skinSpec.roughness + 0.1),
-    metalness: Math.max(0.28, skinSpec.metalness * 0.72),
-    clearcoat: (skinSpec.clearcoat || 0.12) * 0.5
+    roughness: Math.min(0.78, Math.max(0.34, skinSpec.roughness + 0.12)),
+    metalness: Math.max(0.24, skinSpec.metalness * 0.68),
+    clearcoat: (skinSpec.clearcoat || 0.08) * 0.4
   }, quality);
 
   const accentMat = createQualityMaterial({
     color: skinSpec.accent,
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.5, 0.5),
+    normalScale: new THREE.Vector2(0.3, 0.3),
     roughnessMap: skinTex?.roughnessMap || null,
-    roughness: 0.24,
-    metalness: 0.82,
-    clearcoat: 0.58,
+    roughness: 0.28,
+    metalness: 0.78,
+    clearcoat: Math.min(0.35, Math.max(0.12, (skinSpec.clearcoat || 0.12) * 0.9)),
     emissive: skinSpec.emissive || '#000000',
     emissiveIntensity: (skinSpec.emissiveIntensity || 0) * 0.28
   }, quality);
@@ -468,38 +537,38 @@ function buildRoleMaterials({ skinId = 'factory', operatorId = 'vanguard', textu
   const barrelMat = createQualityMaterial({
     color: barrelColor,
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.42, 0.42),
+    normalScale: new THREE.Vector2(0.26, 0.26),
     roughnessMap: skinTex?.roughnessMap || null,
-    roughness: 0.28,
-    metalness: 0.86,
-    clearcoat: 0.3
+    roughness: 0.32,
+    metalness: 0.84,
+    clearcoat: 0.22
   }, quality);
 
   const opticBodyMat = createQualityMaterial({
     color: '#12161d',
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.35, 0.35),
-    roughness: 0.42,
-    metalness: 0.58,
-    clearcoat: 0.22
+    normalScale: new THREE.Vector2(0.22, 0.22),
+    roughness: 0.48,
+    metalness: 0.52,
+    clearcoat: 0.12
   }, quality);
 
   // Contrasting brushed steel / titanium bolt carrier group material
   const boltCarrierMat = createQualityMaterial({
     color: blendHexColors('#cbd5e1', skinSpec.accent, 0.32),
     normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.4, 0.4),
-    roughness: 0.2,
-    metalness: 0.92,
-    clearcoat: 0.65
+    normalScale: new THREE.Vector2(0.26, 0.26),
+    roughness: 0.24,
+    metalness: 0.9,
+    clearcoat: 0.36
   }, quality);
 
   // 12-gauge shotgun shell crimson hull
   const shellHullMat = createQualityMaterial({
     color: '#b91c1c',
-    roughness: 0.38,
-    metalness: 0.15,
-    clearcoat: 0.35
+    roughness: 0.46,
+    metalness: 0.12,
+    clearcoat: 0.16
   }, quality);
 
   const opticLensMat = createQualityMaterial({
@@ -519,46 +588,49 @@ function buildRoleMaterials({ skinId = 'factory', operatorId = 'vanguard', textu
 
   const brassMat = createQualityMaterial({
     color: '#d4af37',
-    roughness: 0.2,
-    metalness: 0.9,
-    clearcoat: 0.48
+    roughness: 0.24,
+    metalness: 0.88,
+    clearcoat: 0.32
   }, quality);
 
+  // Matte woven Ripstop / Cordura tactical sleeve (zero plastic shine)
+  const ripstopTex = getRipstopSleeveTexture();
+  const hasCamoSleeve = Boolean(isTextileSkin && skinTex?.map);
   const sleeveMat = createQualityMaterial({
-    color: sleeveColor,
-    normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.7, 0.7),
-    roughnessMap: skinTex?.roughnessMap || null,
-    roughness: 0.78,
-    metalness: 0.08,
-    clearcoat: 0.06
+    color: hasCamoSleeve ? blendHexColors('#ffffff', opProfile.sleeve, 0.22) : sleeveColor,
+    map: hasCamoSleeve ? skinTex.map : ripstopTex,
+    normalMap: isTextileSkin ? (skinTex?.normalMap || null) : null,
+    normalScale: new THREE.Vector2(0.32, 0.32),
+    roughnessMap: isTextileSkin ? (skinTex?.roughnessMap || null) : null,
+    roughness: 0.90,
+    metalness: 0.0,
+    clearcoat: 0.0
   }, quality);
 
   const cuffMat = createQualityMaterial({
     color: cuffColor,
-    normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.65, 0.65),
-    roughness: 0.68,
-    metalness: 0.14,
-    clearcoat: 0.1
+    map: ripstopTex,
+    normalScale: new THREE.Vector2(0.24, 0.24),
+    roughness: 0.86,
+    metalness: 0.02,
+    clearcoat: 0.0
   }, quality);
 
+  // Genuine matte tactical leather / Nomex glove
   const gloveMat = createQualityMaterial({
     color: gloveColor,
-    normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.62, 0.62),
-    roughness: 0.58,
-    metalness: 0.2,
-    clearcoat: 0.22
+    normalScale: new THREE.Vector2(0.24, 0.24),
+    roughness: 0.78,
+    metalness: 0.04,
+    clearcoat: 0.0
   }, quality);
 
   const knuckleMat = createQualityMaterial({
     color: knuckleColor,
-    normalMap: skinTex?.normalMap || null,
-    normalScale: new THREE.Vector2(0.8, 0.8),
-    roughness: 0.25,
-    metalness: 0.68,
-    clearcoat: 0.72
+    normalScale: new THREE.Vector2(0.28, 0.28),
+    roughness: 0.42,
+    metalness: 0.26,
+    clearcoat: 0.14
   }, quality);
 
   const watchBodyMat = createQualityMaterial({
@@ -657,19 +729,23 @@ export function applyWeaponSkin(
 }
 
 /**
- * Builds a single forearm connecting `elbowPos` cleanly into `wristPos` with rolled/ribbed
- * operator sleeve cuff, velcro wrist strap, and (on the left wrist) an illuminated tactical
- * GPS/telemetry wristwatch angled toward the first-person camera.
+ * Builds an articulated first-person arm: upper bicep extending back from `shoulderPos` into
+ * a padded elbow joint at `elbowPos`, plus an anatomically tapered oval forearm connecting
+ * cleanly into `wristPos` with rolled cloth cuff fold rings, velcro wrist strap, and (on the
+ * left wrist) an illuminated tactical GPS/telemetry wristwatch angled toward the camera.
  */
 function buildConnectedForearm(parentGroup, addPart, {
   side = 'left',
-  elbowPos = [-0.15, -0.14, 0.14],
+  shoulderPos = null,
+  elbowPos = [-0.27, -0.17, 0.09],
   wristPos = [-0.025, -0.028, -0.18],
   armRadius = 0.039
 }) {
   const isLeft = side === 'left';
   const sign = isLeft ? -1 : 1;
 
+  const resolvedShoulderPos = shoulderPos || (isLeft ? [-0.36, -0.15, 0.30] : [0.28, -0.15, 0.32]);
+  const shoulder = new THREE.Vector3(resolvedShoulderPos[0], resolvedShoulderPos[1], resolvedShoulderPos[2]);
   const start = new THREE.Vector3(elbowPos[0], elbowPos[1], elbowPos[2]);
   const end = new THREE.Vector3(wristPos[0], wristPos[1], wristPos[2]);
   const delta = new THREE.Vector3().subVectors(end, start);
@@ -679,66 +755,115 @@ function buildConnectedForearm(parentGroup, addPart, {
   const armGroup = new THREE.Group();
   armGroup.position.copy(mid);
 
-  // Align cylinder +Y axis from elbow to wrist, keeping dorsal/camera side consistent
+  // Align cylinder +Y axis from elbow to wrist and keep local +Z strictly dorsal/camera-facing
   const upAxis = new THREE.Vector3(0, 1, 0);
   const dir = delta.clone().normalize();
-  armGroup.quaternion.setFromUnitVectors(upAxis, dir);
+  const desiredUp = new THREE.Vector3(-0.34 * sign, 0.90, 0.24).normalize();
+  const armRight = new THREE.Vector3().crossVectors(dir, desiredUp).normalize();
+  const armDorsal = new THREE.Vector3().crossVectors(armRight, dir).normalize();
+  const armBasis = new THREE.Matrix4().makeBasis(armRight, dir, armDorsal);
+  armGroup.quaternion.setFromRotationMatrix(armBasis);
 
-  // Ripstop/creased forearm sleeve (fluted cylinder for natural tactical cloth folds)
-  const sleeveGeo = createFlutedCylinder(
-    armRadius * 0.82,
-    armRadius * 1.06,
+  // Anatomically tapered oval forearm sleeve (slim at wrist, fuller muscular belly near elbow — zero vertical fluting)
+  const sleeveGeo = new THREE.CylinderGeometry(
+    armRadius * 0.84,
+    armRadius * 1.12,
     length,
     16,
-    6,
-    8,
-    0.0022
+    4
   );
-  addPart(sleeveGeo, 'sleeve', 0, 0, 0, 0, 0, 0, armGroup);
+  const sleeveMesh = addPart(sleeveGeo, 'sleeve', 0, 0, 0, 0, 0, 0, armGroup);
+  sleeveMesh.scale.set(1.06, 1.0, 0.88);
 
-  // Forearm outer seam & reinforced elbow/ulna panel
-  const seamGeo = createBeveledBox(armRadius * 0.92, length * 0.68, 0.014, 0.004, 2);
-  addPart(seamGeo, 'cuff', sign * armRadius * 0.6, -length * 0.06, -armRadius * 0.42, 0, 0, 0, armGroup);
+  // Forearm outer dorsal pocket & stitched Cordura seam visible from 1P camera
+  const seamGeo = createBeveledBox(armRadius * 0.72, length * 0.56, 0.011, 0.004, 2);
+  addPart(seamGeo, 'cuff', sign * armRadius * 0.52, -length * 0.06, armRadius * 0.36, 0, 0, 0, armGroup);
 
-  // Rolled / ribbed operator sleeve cuff near the wrist (+Y end of the forearm cylinder)
+  // Rolled tactical sleeve cuff near wrist (+Y end of forearm) with stacked cloth fold rings
   const wristY = length * 0.5 - 0.022;
-  const cuffGeo = createFlutedCylinder(
+  const cuffGeo = new THREE.CylinderGeometry(
     armRadius * 0.85,
-    armRadius * 0.9,
-    0.046,
+    armRadius * 0.92,
+    0.056,
     16,
-    3,
-    12,
-    0.0018
+    2
   );
-  addPart(cuffGeo, 'cuff', 0, wristY, 0, 0, 0, 0, armGroup);
+  const cuffMesh = addPart(cuffGeo, 'cuff', 0, wristY - 0.008, 0, 0, 0, 0, armGroup);
+  cuffMesh.scale.set(1.06, 1.0, 0.88);
 
-  // Ribbed cuff trim ring
-  const trimGeo = createFlutedCylinder(
-    armRadius * 0.87,
+  for (const [foldY, radMul] of [[wristY - 0.044, 0.94], [wristY - 0.026, 0.92], [wristY - 0.008, 0.90], [wristY + 0.008, 0.89]]) {
+    const foldRingGeo = new THREE.TorusGeometry(armRadius * radMul, 0.0038, 8, 20);
+    const foldRingMesh = addPart(foldRingGeo, 'cuff', 0, foldY, 0, Math.PI / 2, 0, 0, armGroup);
+    foldRingMesh.scale.set(1.06, 0.88, 1.0);
+  }
+
+  // Smooth inner glove gauntlet cuff collar
+  const trimGeo = new THREE.CylinderGeometry(
+    armRadius * 0.86,
     armRadius * 0.87,
     0.012,
-    16,
-    2,
-    10,
-    0.0012
+    16
   );
-  addPart(trimGeo, 'glove', 0, wristY + 0.02, 0, 0, 0, 0, armGroup);
+  const trimMesh = addPart(trimGeo, 'glove', 0, wristY + 0.02, 0, 0, 0, 0, armGroup);
+  trimMesh.scale.set(1.06, 1.0, 0.88);
 
   // Hook-and-loop velcro wrist strap
-  const strapGeo = createBeveledBox(armRadius * 1.78, 0.018, armRadius * 1.76, 0.005, 2);
+  const strapGeo = createBeveledBox(armRadius * 1.82, 0.016, armRadius * 1.54, 0.005, 2);
   addPart(strapGeo, 'opticBody', 0, wristY + 0.012, 0, 0, 0, 0, armGroup);
 
-  // Left wrist illuminated tactical GPS/telemetry wristwatch facing the camera
+  // Articulated upper-arm / bicep segment extending from shoulder to elbow (continuous human arm under recoil/bob)
+  const upperDelta = new THREE.Vector3().subVectors(start, shoulder);
+  const upperLen = Math.max(0.14, upperDelta.length());
+  const upperDir = upperDelta.clone().normalize();
+  const upperMid = new THREE.Vector3().addVectors(shoulder, start).multiplyScalar(0.5);
+
+  const upperGroup = new THREE.Group();
+  upperGroup.position.copy(upperMid);
+  upperGroup.quaternion.setFromUnitVectors(upAxis, upperDir);
+
+  const bicepGeo = new THREE.CylinderGeometry(
+    armRadius * 1.12,
+    armRadius * 1.32,
+    upperLen,
+    16,
+    2
+  );
+  const bicepMesh = addPart(bicepGeo, 'sleeve', 0, 0, 0, 0, 0, 0, upperGroup);
+  bicepMesh.scale.set(1.06, 1.0, 0.90);
+
+  const shoulderPocketGeo = createBeveledBox(armRadius * 1.32, upperLen * 0.36, 0.014, 0.004, 2);
+  addPart(shoulderPocketGeo, 'cuff', sign * armRadius * 0.56, upperLen * 0.04, -armRadius * 0.62, 0, 0, 0, upperGroup);
+  parentGroup.add(upperGroup);
+
+  // Smooth elbow joint cap + low-profile sculpted tactical elbow pad
+  const elbowJointGeo = new THREE.SphereGeometry(armRadius * 1.12, 14, 12);
+  const elbowJointMesh = addPart(elbowJointGeo, 'sleeve', start.x, start.y, start.z, 0, 0, 0, parentGroup);
+  elbowJointMesh.scale.set(1.04, 0.96, 1.02);
+
+  const outElbow = new THREE.Vector3().subVectors(upperDir, dir);
+  if (outElbow.lengthSq() < 0.01) {
+    outElbow.set(sign * 0.45, -0.75, 0.48);
+  }
+  outElbow.normalize();
+
+  const elbowPadGroup = new THREE.Group();
+  elbowPadGroup.position.copy(start).addScaledVector(outElbow, armRadius * 0.88);
+  elbowPadGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), outElbow);
+  const elbowShellGeo = createBeveledBox(armRadius * 1.38, armRadius * 1.56, 0.02, 0.006, 2);
+  addPart(elbowShellGeo, 'cuff', 0, 0, 0, 0, 0, 0, elbowPadGroup);
+  const elbowCapGeo = createBeveledBox(armRadius * 0.88, armRadius * 1.02, 0.01, 0.004, 2);
+  addPart(elbowCapGeo, 'knuckle', 0, 0, 0.008, 0, 0, 0, elbowPadGroup);
+  parentGroup.add(elbowPadGroup);
+
+  // Left wrist illuminated tactical GPS/telemetry wristwatch clearly oriented dorsal/camera-facing
   if (isLeft) {
     const watchGroup = new THREE.Group();
-    // Place on upper-inner aspect of left wrist facing the player camera
-    watchGroup.position.set(armRadius * 0.68, wristY + 0.004, armRadius * 0.48);
-    watchGroup.rotation.set(0.18, 0.58, -0.15);
+    watchGroup.position.set(armRadius * 0.14, wristY - 0.012, armRadius * 0.72);
+    watchGroup.rotation.set(-0.08, -0.14, 0.08);
 
-    // Heavy-duty nylon watch band wrapping wrist
-    const bandGeo = createBeveledBox(armRadius * 1.84, 0.026, armRadius * 1.84, 0.006, 2);
-    addPart(bandGeo, 'opticBody', -armRadius * 0.55, 0, -armRadius * 0.38, 0, 0, 0, watchGroup);
+    // Heavy-duty nylon watch band wrapping wrist cleanly
+    const bandGeo = createBeveledBox(armRadius * 1.92, 0.024, armRadius * 1.62, 0.006, 2);
+    addPart(bandGeo, 'opticBody', -armRadius * 0.14, 0, -armRadius * 0.68, 0, 0, 0, watchGroup);
 
     // Ruggedized titanium watch bezel housing
     const bezelGeo = createBeveledBox(0.04, 0.034, 0.014, 0.0035, 3);
@@ -1171,10 +1296,11 @@ export function _buildFirstPersonArms(
   const rHandPos = gripCfg.rightHandPos;
   const lHandPos = gripCfg.leftHandPos;
 
-  // Left Forearm entering from lower-left `[-0.15, -0.14, 0.14]` angled cleanly to support wrist
+  // Left arm extending cleanly from shoulder/elbow laterally into the support wrist
   buildConnectedForearm(armsRoot, localAddPart, {
     side: 'left',
-    elbowPos: gripCfg.leftElbowPos || [-0.15, -0.14, 0.14],
+    shoulderPos: gripCfg.leftShoulderPos || [-0.36, -0.15, 0.30],
+    elbowPos: gripCfg.leftElbowPos || [-0.27, -0.17, 0.09],
     wristPos: [lHandPos[0] - 0.014, lHandPos[1] - 0.01, lHandPos[2] + 0.036],
     armRadius: 0.039
   });
@@ -1182,10 +1308,11 @@ export function _buildFirstPersonArms(
   // Left Gloved Hand (Support / Forend C-Clamp Hand)
   buildLeftSupportHand(armsRoot, localAddPart, gripCfg);
 
-  // Right Forearm entering from lower-right `[0.12, -0.14, 0.24]` angled cleanly to trigger wrist
+  // Right arm extending cleanly from shoulder/elbow into the trigger wrist
   buildConnectedForearm(armsRoot, localAddPart, {
     side: 'right',
-    elbowPos: gripCfg.rightElbowPos || [0.12, -0.14, 0.24],
+    shoulderPos: gripCfg.rightShoulderPos || [0.28, -0.15, 0.32],
+    elbowPos: gripCfg.rightElbowPos || [0.18, -0.16, 0.19],
     wristPos: [rHandPos[0] + 0.016, rHandPos[1] - 0.01, rHandPos[2] + 0.036],
     armRadius: 0.039
   });

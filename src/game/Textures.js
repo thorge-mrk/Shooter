@@ -12,8 +12,8 @@ export const SKIN_CATALOG = [
     emissive: '#000000',
     emissiveIntensity: 0.0,
     metalness: 0.52,
-    roughness: 0.36,
-    clearcoat: 0.22
+    roughness: 0.44,
+    clearcoat: 0.04
   },
   {
     id: 'carbon',
@@ -26,8 +26,8 @@ export const SKIN_CATALOG = [
     emissive: '#0ea5e9',
     emissiveIntensity: 0.45,
     metalness: 0.44,
-    roughness: 0.24,
-    clearcoat: 0.68
+    roughness: 0.30,
+    clearcoat: 0.36
   },
   {
     id: 'desert_camo',
@@ -40,9 +40,9 @@ export const SKIN_CATALOG = [
     cloth: '#a6895e',
     emissive: '#000000',
     emissiveIntensity: 0.0,
-    metalness: 0.28,
-    roughness: 0.56,
-    clearcoat: 0.12
+    metalness: 0.16,
+    roughness: 0.78,
+    clearcoat: 0.0
   },
   {
     id: 'arctic_camo',
@@ -55,9 +55,9 @@ export const SKIN_CATALOG = [
     cloth: '#cbd5e1',
     emissive: '#38bdf8',
     emissiveIntensity: 0.32,
-    metalness: 0.32,
-    roughness: 0.4,
-    clearcoat: 0.28
+    metalness: 0.22,
+    roughness: 0.58,
+    clearcoat: 0.05
   },
   {
     id: 'naval',
@@ -71,8 +71,8 @@ export const SKIN_CATALOG = [
     emissive: '#06b6d4',
     emissiveIntensity: 0.45,
     metalness: 0.46,
-    roughness: 0.34,
-    clearcoat: 0.38
+    roughness: 0.42,
+    clearcoat: 0.08
   },
   {
     id: 'woodland',
@@ -84,9 +84,9 @@ export const SKIN_CATALOG = [
     cloth: '#44593e',
     emissive: '#000000',
     emissiveIntensity: 0.0,
-    metalness: 0.26,
-    roughness: 0.58,
-    clearcoat: 0.1
+    metalness: 0.14,
+    roughness: 0.82,
+    clearcoat: 0.0
   },
   {
     id: 'ceramic',
@@ -98,9 +98,9 @@ export const SKIN_CATALOG = [
     cloth: '#475569',
     emissive: '#f97316',
     emissiveIntensity: 0.36,
-    metalness: 0.38,
-    roughness: 0.22,
-    clearcoat: 0.74
+    metalness: 0.34,
+    roughness: 0.32,
+    clearcoat: 0.34
   },
   {
     id: 'crimson',
@@ -113,8 +113,8 @@ export const SKIN_CATALOG = [
     emissive: '#ef4444',
     emissiveIntensity: 0.52,
     metalness: 0.54,
-    roughness: 0.26,
-    clearcoat: 0.58
+    roughness: 0.30,
+    clearcoat: 0.32
   },
   {
     id: 'cobalt',
@@ -127,8 +127,8 @@ export const SKIN_CATALOG = [
     emissive: '#38bdf8',
     emissiveIntensity: 0.58,
     metalness: 0.56,
-    roughness: 0.28,
-    clearcoat: 0.52
+    roughness: 0.31,
+    clearcoat: 0.30
   },
   {
     id: 'damascus',
@@ -141,8 +141,8 @@ export const SKIN_CATALOG = [
     emissive: '#ca8a04',
     emissiveIntensity: 0.38,
     metalness: 0.68,
-    roughness: 0.22,
-    clearcoat: 0.68
+    roughness: 0.28,
+    clearcoat: 0.38
   }
 ];
 
@@ -191,7 +191,7 @@ function seededNoise(seed) {
  * Converts a grayscale height canvas into a true tangent-space RGB Normal Map using Sobel derivatives,
  * plus a matched Roughness/AO canvas.
  */
-function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.4, baseRoughness = 180, roughBiasCanvas = null) {
+function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.0, baseRoughness = 215, roughBiasCanvas = null) {
   const size = heightCanvas.width;
   const hctx = heightCanvas.getContext('2d');
   const src = hctx.getImageData(0, 0, size, size).data;
@@ -208,6 +208,9 @@ function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.4, baseRou
   const rctx = roughCanvas.getContext('2d');
   const roughImg = rctx.createImageData(size, size);
   const rdst = roughImg.data;
+
+  // Attenuate derivative spikes to eliminate plastic / clay-like normal shimmer
+  const effectiveStrength = strength * 0.55;
 
   const sampleH = (x, y) => {
     const wx = (x + size) % size;
@@ -227,8 +230,8 @@ function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.4, baseRou
       const b = sampleH(x, y + 1);
       const br = sampleH(x + 1, y + 1);
 
-      const dx = (tr + 2 * r + br - (tl + 2 * l + bl)) * strength;
-      const dy = (bl + 2 * b + br - (tl + 2 * t + tr)) * strength;
+      const dx = (tr + 2 * r + br - (tl + 2 * l + bl)) * effectiveStrength;
+      const dy = (bl + 2 * b + br - (tl + 2 * t + tr)) * effectiveStrength;
       const dz = 1.0;
       const inv = 1.0 / Math.hypot(dx, dy, dz);
 
@@ -239,9 +242,9 @@ function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.4, baseRou
       ndst[idx + 3] = 255;
 
       // Pack AO (R), Roughness (G), Metalness modulation (B)
-      const bias = biasData ? (biasData[idx + 1] - 128) * 0.65 : 0;
-      const ao = Math.min(255, Math.max(80, Math.round(188 + (c - 0.5) * 140)));
-      const rough = Math.min(255, Math.max(24, Math.round(baseRoughness - (c - 0.5) * 95 + bias)));
+      const bias = biasData ? (biasData[idx + 1] - 128) * 0.52 : 0;
+      const ao = Math.min(255, Math.max(96, Math.round(196 + (c - 0.5) * 110)));
+      const rough = Math.min(255, Math.max(36, Math.round(baseRoughness - (c - 0.5) * 54 + bias)));
       rdst[idx] = ao;
       rdst[idx + 1] = rough;
       rdst[idx + 2] = Math.min(255, Math.max(20, 255 - rough));
@@ -256,35 +259,53 @@ function buildNormalAndRoughnessFromHeight(heightCanvas, strength = 2.4, baseRou
 
 /**
  * Creates a material adapted to the 3 required Graphics Presets:
- * - 'ultra' (ULTRA 4K): MeshPhysicalMaterial with clearcoat, full Normal/Roughness/AO/Emissive maps
- * - 'balanced' (HIGH BALANCED): MeshStandardMaterial with Normal/Roughness/Emissive maps
- * - 'fast' (HD PERFORMANCE): MeshLambertMaterial with zero extra texture samplers for peak FPS
+ * - 'ultra' (ULTRA 4K): MeshPhysicalMaterial with restrained clearcoat (only on glossy metals/optics), Normal/Roughness/Emissive maps
+ * - 'balanced' (HIGH BALANCED): MeshStandardMaterial with subtle Normal/Roughness/Emissive maps
+ * - 'fast' (HD PERFORMANCE): Crisp MeshLambertMaterial without normal/roughness samplers for peak FPS & clean matte low-poly aesthetic
  */
 export function createQualityMaterial(params = {}, quality = 'balanced') {
   if (quality === 'fast') {
+    const useMapInFast = params.preferCleanLowPoly
+      ? false
+      : params.allowMapInFast !== undefined
+        ? Boolean(params.allowMapInFast)
+        : Boolean(params.map);
     return new THREE.MeshLambertMaterial({
       color: params.color ?? 0xffffff,
-      map: params.map || null,
+      map: useMapInFast ? (params.map || null) : null,
       emissive: params.emissive ?? 0x000000,
       emissiveMap: params.emissiveMap || null,
       emissiveIntensity: params.emissiveIntensity ?? 0,
       transparent: Boolean(params.transparent),
       opacity: params.opacity ?? 1.0,
-      side: params.side ?? THREE.FrontSide
+      side: params.side ?? THREE.FrontSide,
+      flatShading: Boolean(params.flatShading ?? params.preferCleanLowPoly)
     });
   }
 
+  const resolvedRoughness = params.roughness ?? 0.78;
+  const resolvedMetalness = params.metalness ?? 0.08;
+
   if (quality === 'ultra') {
+    const requestedCoat = params.clearcoat !== undefined ? params.clearcoat : 0.0;
+    // Never apply clearcoat film onto matte concrete, stone, wood, or cloth surfaces
+    const safeClearcoat = (resolvedRoughness >= 0.70 && !params.transparent)
+      ? 0.0
+      : Math.min(
+          requestedCoat,
+          params.transparent || resolvedRoughness < 0.18 ? 1.0 : 0.42
+        );
+
     return new THREE.MeshPhysicalMaterial({
       color: params.color ?? 0xffffff,
       map: params.map || null,
       normalMap: params.normalMap || null,
-      normalScale: params.normalScale || new THREE.Vector2(0.85, 0.85),
+      normalScale: params.normalScale || new THREE.Vector2(0.38, 0.38),
       roughnessMap: params.roughnessMap || null,
-      roughness: params.roughness ?? 0.65,
-      metalness: params.metalness ?? 0.15,
-      clearcoat: params.clearcoat ?? 0.12,
-      clearcoatRoughness: params.clearcoatRoughness ?? 0.35,
+      roughness: resolvedRoughness,
+      metalness: resolvedMetalness,
+      clearcoat: safeClearcoat,
+      clearcoatRoughness: params.clearcoatRoughness ?? 0.38,
       emissive: params.emissive ?? 0x000000,
       emissiveMap: params.emissiveMap || null,
       emissiveIntensity: params.emissiveIntensity ?? 0,
@@ -298,10 +319,10 @@ export function createQualityMaterial(params = {}, quality = 'balanced') {
     color: params.color ?? 0xffffff,
     map: params.map || null,
     normalMap: params.normalMap || null,
-    normalScale: params.normalScale || new THREE.Vector2(0.65, 0.65),
+    normalScale: params.normalScale || new THREE.Vector2(0.28, 0.28),
     roughnessMap: params.roughnessMap || null,
-    roughness: params.roughness ?? 0.68,
-    metalness: params.metalness ?? 0.15,
+    roughness: resolvedRoughness,
+    metalness: resolvedMetalness,
     emissive: params.emissive ?? 0x000000,
     emissiveMap: params.emissiveMap || null,
     emissiveIntensity: params.emissiveIntensity ?? 0,
@@ -469,16 +490,18 @@ export class TextureLibrary {
       ctx.fillStyle = '#3f4b5b';
       ctx.fillRect(0, 0, size, size);
 
-      // Isotropic Parkerized phosphate micro-speckle
+      // Isotropic Parkerized phosphate micro-speckle (albedo detail with gentle height)
       for (let i = 0; i < 6500; i++) {
         const x = rand() * size;
         const y = rand() * size;
         const v = Math.floor(46 + rand() * 42);
         ctx.fillStyle = `rgb(${v},${v + 7},${v + 16})`;
         ctx.fillRect(x, y, 1.6, 1.6);
-        const hv = Math.floor(114 + rand() * 28);
-        hctx.fillStyle = `rgb(${hv},${hv},${hv})`;
-        hctx.fillRect(x, y, 1.5, 1.5);
+        if (i % 3 === 0) {
+          const hv = Math.floor(122 + rand() * 12);
+          hctx.fillStyle = `rgb(${hv},${hv},${hv})`;
+          hctx.fillRect(x, y, 2, 2);
+        }
       }
 
       // Subtle horizontal CNC machined toolpath striations
@@ -486,7 +509,7 @@ export class TextureLibrary {
         const alpha = 0.025 + rand() * 0.035;
         ctx.fillStyle = y % 4 === 0 ? `rgba(226, 232, 240, ${alpha})` : `rgba(15, 23, 42, ${alpha})`;
         ctx.fillRect(0, y, size, 1);
-        hctx.fillStyle = y % 4 === 0 ? 'rgba(155,155,155,0.28)' : 'rgba(105,105,105,0.28)';
+        hctx.fillStyle = y % 4 === 0 ? 'rgba(136,136,136,0.22)' : 'rgba(120,120,120,0.22)';
         hctx.fillRect(0, y, size, 1);
       }
 
@@ -495,16 +518,16 @@ export class TextureLibrary {
       for (const sy of seamYs) {
         ctx.fillStyle = '#252f3d';
         ctx.fillRect(0, sy - 3, size, 6);
-        hctx.fillStyle = '#404040';
+        hctx.fillStyle = '#585858';
         hctx.fillRect(0, sy - 3, size, 6);
         // Metallic edge wear highlight along bevel lip
         ctx.fillStyle = 'rgba(186, 200, 218, 0.55)';
         ctx.fillRect(0, sy - 4, size, 1.5);
         ctx.fillRect(0, sy + 3, size, 1.5);
-        hctx.fillStyle = '#b8b8b8';
+        hctx.fillStyle = '#a2a2a2';
         hctx.fillRect(0, sy - 4, size, 1.5);
         // Lower roughness (shinier metal) on worn edges
-        rbctx.fillStyle = '#383838';
+        rbctx.fillStyle = '#484848';
         rbctx.fillRect(0, sy - 4, size, 2);
         rbctx.fillRect(0, sy + 3, size, 2);
       }
@@ -593,10 +616,12 @@ export class TextureLibrary {
         hctx.fill();
       }
     } else if (spec.id === 'desert_camo') {
-      // DESERT VIPER: Multi-scale arid digital/tiger-stripe camo with ripstop Cordura
-      // fabric micro-grid + FDE Cerakote metallic finish.
+      // DESERT VIPER: Multi-scale arid digital/tiger-stripe camo with crisp matte
+      // Ripstop/Cordura fabric cross-weave and zero plastic height noise.
       ctx.fillStyle = '#c8a876';
       ctx.fillRect(0, 0, size, size);
+      rbctx.fillStyle = '#989898';
+      rbctx.fillRect(0, 0, size, size);
 
       // Macro arid tiger-stripe / desert dune bands
       const camoPalette = ['#9c7c50', '#785a37', '#dfC498', '#4a3723', '#b59262'];
@@ -629,40 +654,46 @@ export class TextureLibrary {
         ctx.fillRect(bx, by, bw, bh);
       }
 
-      // Ripstop Cordura fabric 6x6 micro-grid in color & heightmap
-      ctx.strokeStyle = 'rgba(42, 30, 18, 0.14)';
+      // Crisp Ripstop/Cordura fabric weave (4px fine thread + 20px reinforcement grid)
+      for (let y = 0; y < size; y += 4) {
+        for (let x = 0; x < size; x += 4) {
+          const isWarp = ((x / 4 + y / 4) % 2) === 0;
+          ctx.fillStyle = isWarp ? 'rgba(255, 244, 224, 0.06)' : 'rgba(38, 26, 14, 0.08)';
+          ctx.fillRect(x, y, 3, 3);
+          hctx.fillStyle = isWarp ? '#868686' : '#797979';
+          hctx.fillRect(x, y, 3, 3);
+        }
+      }
+      ctx.strokeStyle = 'rgba(42, 30, 18, 0.20)';
       ctx.lineWidth = 1;
-      hctx.strokeStyle = '#9e9e9e';
+      hctx.strokeStyle = '#969696';
       hctx.lineWidth = 1;
-      for (let g = 0; g < size; g += 6) {
+      for (let g = 0; g < size; g += 20) {
         ctx.beginPath();
-        ctx.moveTo(g, 0);
-        ctx.lineTo(g, size);
-        ctx.moveTo(0, g);
-        ctx.lineTo(size, g);
+        ctx.moveTo(g + 0.5, 0);
+        ctx.lineTo(g + 0.5, size);
+        ctx.moveTo(0, g + 0.5);
+        ctx.lineTo(size, g + 0.5);
         ctx.stroke();
 
         hctx.beginPath();
-        hctx.moveTo(g, 0);
-        hctx.lineTo(g, size);
-        hctx.moveTo(0, g);
-        hctx.lineTo(size, g);
+        hctx.moveTo(g + 0.5, 0);
+        hctx.lineTo(g + 0.5, size);
+        hctx.moveTo(0, g + 0.5);
+        hctx.lineTo(size, g + 0.5);
         hctx.stroke();
       }
 
-      // FDE Cerakote metallic micro-grain
-      for (let i = 0; i < 2400; i++) {
+      // Matte mineral dye grain in color only (no noisy height spikes)
+      for (let i = 0; i < 1800; i++) {
         const x = rand() * size;
         const y = rand() * size;
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 244, 224, 0.08)' : 'rgba(40, 28, 16, 0.08)';
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 244, 224, 0.06)' : 'rgba(40, 28, 16, 0.07)';
         ctx.fillRect(x, y, 1.5, 1.5);
-        const hv = 118 + Math.floor(rand() * 24);
-        hctx.fillStyle = `rgb(${hv},${hv},${hv})`;
-        hctx.fillRect(x, y, 1.5, 1.5);
       }
     } else if (spec.id === 'arctic_camo') {
       // ARCTIC WOLF: Crisp splinter overwhite/glacier-grey geometric snow camo
-      // with frost micro-grain and ice-blue tactical accents.
+      // with subtle Ripstop weave and ice-blue tactical accents.
       ctx.fillStyle = '#e5edf5';
       ctx.fillRect(0, 0, size, size);
 
@@ -683,7 +714,7 @@ export class TextureLibrary {
         ctx.closePath();
         ctx.fill();
 
-        hctx.fillStyle = isIceAccent ? '#a8a8a8' : i % 2 === 0 ? '#8c8c8c' : '#747474';
+        hctx.fillStyle = isIceAccent ? '#8d8d8d' : i % 2 === 0 ? '#848484' : '#7b7b7b';
         hctx.fill();
       }
 
@@ -699,15 +730,22 @@ export class TextureLibrary {
         ctx.stroke();
       }
 
-      // Crystalline frost micro-grain
-      for (let i = 0; i < 3600; i++) {
+      // Crisp matte arctic Ripstop weave relief (no chaotic height spikes)
+      for (let y = 0; y < size; y += 4) {
+        for (let x = 0; x < size; x += 4) {
+          if (((x / 4 + y / 4) % 2) === 0) {
+            hctx.fillStyle = 'rgba(138, 138, 138, 0.35)';
+            hctx.fillRect(x, y, 3, 3);
+          }
+        }
+      }
+
+      // Crystalline frost micro-grain in color channel only
+      for (let i = 0; i < 2600; i++) {
         const x = rand() * size;
         const y = rand() * size;
-        ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(148,163,184,0.14)';
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(148,163,184,0.12)';
         ctx.fillRect(x, y, 1.5, 1.5);
-        const hv = 115 + Math.floor(rand() * 32);
-        hctx.fillStyle = `rgb(${hv},${hv},${hv})`;
-        hctx.fillRect(x, y, 1.5, 1.5);
       }
 
       // Subtle ice-blue tactical accent line
@@ -730,17 +768,17 @@ export class TextureLibrary {
         const gw = (1 + Math.floor(rand() * 5)) * 4;
         const gh = (1 + Math.floor(rand() * 3)) * 4;
         ctx.fillRect(gx, gy, gw, gh);
-        hctx.fillStyle = i % 2 === 0 ? '#8c8c8c' : '#727272';
+        hctx.fillStyle = i % 2 === 0 ? '#888888' : '#787878';
         hctx.fillRect(gx, gy, gw, gh);
       }
 
       // Brushed anodized sea-steel striations
-      for (let i = 0; i < 2400; i++) {
+      for (let i = 0; i < 2000; i++) {
         const x = rand() * size;
         const y = rand() * size;
         ctx.fillStyle = i % 2 === 0 ? 'rgba(56, 189, 248, 0.06)' : 'rgba(2, 6, 23, 0.14)';
         ctx.fillRect(x, y, 22, 1);
-        hctx.fillStyle = i % 2 === 0 ? '#9c9c9c' : '#646464';
+        hctx.fillStyle = i % 2 === 0 ? '#8c8c8c' : '#747474';
         hctx.fillRect(x, y, 18, 1);
       }
 
@@ -750,16 +788,18 @@ export class TextureLibrary {
         ctx.fillRect(0, py - 2, size, 5);
         ctx.fillStyle = '#06b6d4';
         ctx.fillRect(0, py, size, 1.5);
-        hctx.fillStyle = '#383838';
+        hctx.fillStyle = '#505050';
         hctx.fillRect(0, py - 2, size, 5);
         ectx.fillStyle = '#06b6d4';
         ectx.fillRect(0, py, size, 1.5);
       }
     } else if (spec.id === 'woodland') {
       // WOODLAND STALKER: Authentic multi-layer temperate woodland leaf/bark camouflage
-      // with olive drab, moss, & earth tones.
+      // with crisp matte Ripstop/Cordura fabric weave and zero oily/plastic sheen.
       ctx.fillStyle = '#486340';
       ctx.fillRect(0, 0, size, size);
+      rbctx.fillStyle = '#9c9c9c';
+      rbctx.fillRect(0, 0, size, size);
 
       const forestPalette = ['#2b3d26', '#5c7849', '#4a3728', '#1e291b', '#6d5237', '#3b5234'];
       for (let i = 0; i < 75; i++) {
@@ -786,22 +826,42 @@ export class TextureLibrary {
         ctx.fill();
       }
 
-      // Bark & twig micro-striations
+      // Bark & twig micro-striations in albedo color
       for (let i = 0; i < 950; i++) {
         const x = rand() * size;
         const y = rand() * size;
         ctx.fillStyle = i % 2 === 0 ? 'rgba(26, 36, 21, 0.22)' : 'rgba(115, 92, 62, 0.16)';
         ctx.fillRect(x, y, 2, 10 + rand() * 12);
-        hctx.fillStyle = i % 2 === 0 ? '#686868' : '#969696';
-        hctx.fillRect(x, y, 2, 10);
       }
 
-      // Fine matte canvas / ripstop weave relief
-      hctx.strokeStyle = 'rgba(148, 148, 148, 0.35)';
+      // Fine matte Ripstop / Cordura cross-weave in albedo & heightmap
+      for (let y = 0; y < size; y += 4) {
+        for (let x = 0; x < size; x += 4) {
+          const isWarp = ((x / 4 + y / 4) % 2) === 0;
+          ctx.fillStyle = isWarp ? 'rgba(255, 255, 255, 0.045)' : 'rgba(12, 18, 10, 0.07)';
+          ctx.fillRect(x, y, 3, 3);
+          hctx.fillStyle = isWarp ? '#868686' : '#797979';
+          hctx.fillRect(x, y, 3, 3);
+        }
+      }
+      ctx.strokeStyle = 'rgba(16, 24, 14, 0.18)';
+      ctx.lineWidth = 1;
+      hctx.strokeStyle = '#969696';
       hctx.lineWidth = 1;
-      for (let g = 0; g < size; g += 5) {
-        hctx.strokeRect(g, 0, 5, size);
-        hctx.strokeRect(0, g, size, 5);
+      for (let g = 0; g < size; g += 20) {
+        ctx.beginPath();
+        ctx.moveTo(g + 0.5, 0);
+        ctx.lineTo(g + 0.5, size);
+        ctx.moveTo(0, g + 0.5);
+        ctx.lineTo(size, g + 0.5);
+        ctx.stroke();
+
+        hctx.beginPath();
+        hctx.moveTo(g + 0.5, 0);
+        hctx.lineTo(g + 0.5, size);
+        hctx.moveTo(0, g + 0.5);
+        hctx.lineTo(size, g + 0.5);
+        hctx.stroke();
       }
     } else if (spec.id === 'ceramic') {
       // BALLISTIC CERMET: High-tech white/light-grey ballistic cermet hex-tile matrix
@@ -1096,7 +1156,7 @@ export class TextureLibrary {
 
     const { normCanvas, roughCanvas } = buildNormalAndRoughnessFromHeight(
       h,
-      2.6,
+      1.9,
       Math.round(spec.roughness * 255),
       rBias
     );
@@ -1117,7 +1177,7 @@ export class TextureLibrary {
     return out;
   }
 
-  _finalizePbr(colorCanvas, heightCanvas, rx, ry, normalStrength = 2.5, baseRoughness = 185) {
+  _finalizePbr(colorCanvas, heightCanvas, rx, ry, normalStrength = 1.9, baseRoughness = 216) {
     const { normCanvas, roughCanvas } = buildNormalAndRoughnessFromHeight(heightCanvas, normalStrength, baseRoughness);
     const map = makeRepeatTexture(colorCanvas, rx, ry, true);
     const normalMap = makeRepeatTexture(normCanvas, rx, ry, false);
@@ -1140,14 +1200,14 @@ export class TextureLibrary {
     bctx.fillRect(0, 0, size, size);
 
     for (let y = 0; y < size; y += 2) {
-      const wave = Math.sin(y * 0.25) * 14 + Math.cos(y * 0.11) * 8;
+      const wave = Math.sin(y * 0.25) * 12 + Math.cos(y * 0.11) * 7;
       const r = Math.min(255, Math.max(0, Math.round(211 + wave)));
       const g = Math.min(255, Math.max(0, Math.round(176 + wave * 0.85)));
       const bl = Math.min(255, Math.max(0, Math.round(124 + wave * 0.65)));
       ctx.fillStyle = `rgb(${r},${g},${bl})`;
       ctx.fillRect(0, y, size, 2);
 
-      const bv = Math.min(255, Math.max(0, Math.round(128 + wave * 2.1)));
+      const bv = Math.min(255, Math.max(0, Math.round(128 + wave * 1.1)));
       bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
       bctx.fillRect(0, y, size, 2);
     }
@@ -1161,7 +1221,7 @@ export class TextureLibrary {
       ctx.fillRect(x, y, w, w);
     }
 
-    return this._finalizePbr(c, b, rx, ry, 2.4, 210);
+    return this._finalizePbr(c, b, rx, ry, 1.5, 228);
   }
 
   _buildConcrete(rx, ry) {
@@ -1177,23 +1237,32 @@ export class TextureLibrary {
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 4000; i++) {
+    // Subtle concrete mineral aggregate in albedo, with calm low-variance height
+    for (let i = 0; i < 3600; i++) {
       const x = rand() * size;
       const y = rand() * size;
-      const r = 1 + rand() * 2.5;
-      const g = Math.floor(138 + rand() * 40);
+      const r = 1 + rand() * 2;
+      const g = Math.floor(138 + rand() * 36);
       ctx.fillStyle = `rgb(${g},${g + 3},${g + 6})`;
       ctx.fillRect(x, y, r, r);
 
-      const bv = Math.floor(110 + rand() * 38);
-      bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
-      bctx.fillRect(x, y, r, r);
+      if (i % 3 === 0) {
+        const bv = Math.floor(121 + rand() * 14);
+        bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+        bctx.fillRect(x, y, 2, 2);
+      }
     }
 
-    ctx.strokeStyle = 'rgba(35, 42, 50, 0.38)';
+    // Crisp architectural concrete slab seam & horizontal formwork joint
+    ctx.fillStyle = 'rgba(42, 50, 60, 0.24)';
+    ctx.fillRect(0, 127, size, 2);
+    bctx.fillStyle = '#6c6c6c';
+    bctx.fillRect(0, 127, size, 2);
+
+    ctx.strokeStyle = 'rgba(35, 42, 50, 0.34)';
     ctx.lineWidth = 3;
     ctx.strokeRect(2, 2, size - 4, size - 4);
-    bctx.strokeStyle = '#383838';
+    bctx.strokeStyle = '#646464';
     bctx.lineWidth = 3;
     bctx.strokeRect(2, 2, size - 4, size - 4);
 
@@ -1203,10 +1272,14 @@ export class TextureLibrary {
         ctx.beginPath();
         ctx.arc(px, py, 3.5, 0, Math.PI * 2);
         ctx.fill();
+        bctx.fillStyle = '#626262';
+        bctx.beginPath();
+        bctx.arc(px, py, 3, 0, Math.PI * 2);
+        bctx.fill();
       }
     }
 
-    return this._finalizePbr(c, b, rx, ry, 2.8, 195);
+    return this._finalizePbr(c, b, rx, ry, 1.65, 224);
   }
 
   _buildMarbleColumn(rx, ry) {
@@ -1219,7 +1292,7 @@ export class TextureLibrary {
 
     ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(0, 0, size, size);
-    bctx.fillStyle = '#888888';
+    bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
     // Subtle stone veins & weathered flutes
@@ -1227,7 +1300,7 @@ export class TextureLibrary {
       const x = (i / 16) * size;
       ctx.fillStyle = i % 2 === 0 ? 'rgba(100,116,139,0.16)' : 'rgba(248,250,252,0.16)';
       ctx.fillRect(x, 0, size / 16, size);
-      bctx.fillStyle = i % 2 === 0 ? '#a8a8a8' : '#646464';
+      bctx.fillStyle = i % 2 === 0 ? '#929292' : '#707070';
       bctx.fillRect(x, 0, size / 16, size);
     }
     for (let i = 0; i < 1800; i++) {
@@ -1235,7 +1308,7 @@ export class TextureLibrary {
       ctx.fillStyle = `rgb(${g},${g + 2},${g + 5})`;
       ctx.fillRect(rand() * size, rand() * size, 3, 2);
     }
-    return this._finalizePbr(c, b, rx, ry, 2.6, 140);
+    return this._finalizePbr(c, b, rx, ry, 1.6, 198);
   }
 
   _buildRockCliff(rx, ry) {
@@ -1251,19 +1324,19 @@ export class TextureLibrary {
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 220; i++) {
+    for (let i = 0; i < 200; i++) {
       const x = rand() * size;
       const y = rand() * size;
-      const w = 12 + rand() * 36;
-      const h = 6 + rand() * 18;
-      const g = Math.floor(62 + rand() * 54);
+      const w = 14 + rand() * 38;
+      const h = 6 + rand() * 16;
+      const g = Math.floor(62 + rand() * 52);
       ctx.fillStyle = `rgb(${g + 6},${g + 3},${g})`;
       ctx.fillRect(x, y, w, h);
-      const bv = Math.floor(60 + rand() * 135);
+      const bv = Math.floor(104 + rand() * 48);
       bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
       bctx.fillRect(x, y, w, h);
     }
-    return this._finalizePbr(c, b, rx, ry, 3.4, 215);
+    return this._finalizePbr(c, b, rx, ry, 1.9, 230);
   }
 
   _buildAsphalt(rx, ry) {
@@ -1279,17 +1352,19 @@ export class TextureLibrary {
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 5500; i++) {
+    for (let i = 0; i < 5000; i++) {
       const g = Math.floor(28 + rand() * 36);
       const x = rand() * size;
       const y = rand() * size;
       ctx.fillStyle = `rgb(${g},${g + 2},${g + 5})`;
       ctx.fillRect(x, y, 2, 2);
-      const bv = Math.floor(90 + rand() * 75);
-      bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
-      bctx.fillRect(x, y, 2, 2);
+      if (i % 3 === 0) {
+        const bv = Math.floor(116 + rand() * 24);
+        bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+        bctx.fillRect(x, y, 2, 2);
+      }
     }
-    return this._finalizePbr(c, b, rx, ry, 3.0, 175);
+    return this._finalizePbr(c, b, rx, ry, 1.6, 220);
   }
 
   _buildMossyStone(rx, ry) {
@@ -1311,11 +1386,11 @@ export class TextureLibrary {
       const isMoss = rand() < 0.28;
       ctx.fillStyle = isMoss ? 'rgba(63, 98, 46, 0.55)' : 'rgba(120, 126, 118, 0.45)';
       ctx.fillRect(x, y, 4, 4);
-      const bv = isMoss ? 155 : 95;
+      const bv = isMoss ? 138 : 114;
       bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
       bctx.fillRect(x, y, 4, 4);
     }
-    return this._finalizePbr(c, b, rx, ry, 2.9, 200);
+    return this._finalizePbr(c, b, rx, ry, 1.75, 228);
   }
 
   _buildBark(rx, ry) {
@@ -1336,10 +1411,10 @@ export class TextureLibrary {
       const y = rand() * size;
       ctx.fillStyle = i % 2 === 0 ? '#362518' : '#5e4430';
       ctx.fillRect(x, y, 3, 24);
-      bctx.fillStyle = i % 2 === 0 ? '#454545' : '#b8b8b8';
+      bctx.fillStyle = i % 2 === 0 ? '#686868' : '#9c9c9c';
       bctx.fillRect(x, y, 3, 24);
     }
-    return this._finalizePbr(c, b, rx, ry, 3.2, 220);
+    return this._finalizePbr(c, b, rx, ry, 1.95, 232);
   }
 
   _buildHarborDeck(rx, ry) {
@@ -1355,26 +1430,31 @@ export class TextureLibrary {
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 4600; i++) {
+    for (let i = 0; i < 4200; i++) {
       const g = Math.floor(58 + rand() * 32);
       const x = rand() * size;
       const y = rand() * size;
       ctx.fillStyle = `rgb(${g},${g + 4},${g + 9})`;
       ctx.fillRect(x, y, 2, 2);
 
-      const bv = Math.floor(112 + rand() * 36);
-      bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
-      bctx.fillRect(x, y, 2, 2);
+      if (i % 3 === 0) {
+        const bv = Math.floor(121 + rand() * 14);
+        bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+        bctx.fillRect(x, y, 2, 2);
+      }
     }
 
     ctx.strokeStyle = 'rgba(20, 26, 33, 0.42)';
     ctx.lineWidth = 3;
     ctx.strokeRect(1, 1, size - 2, size - 2);
+    bctx.strokeStyle = '#626262';
+    bctx.lineWidth = 3;
+    bctx.strokeRect(1, 1, size - 2, size - 2);
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, size - 20, size - 20);
 
-    return this._finalizePbr(c, b, rx, ry, 2.6, 165);
+    return this._finalizePbr(c, b, rx, ry, 1.6, 218);
   }
 
   _buildContainer(mainHex, darkHex, stencilHex, rx, ry) {
@@ -1394,25 +1474,30 @@ export class TextureLibrary {
     for (let i = 0; i < ribs; i++) {
       ctx.fillStyle = i % 2 === 0 ? mainHex : darkHex;
       ctx.fillRect(i * w, 0, w, size);
-      bctx.fillStyle = i % 2 === 0 ? '#d8d8d8' : '#353535';
+      // Crisp micro bevel highlight along each corrugated rib edge
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(i * w, 0, 1.5, size);
+      ctx.fillStyle = 'rgba(0,0,0,0.14)';
+      ctx.fillRect(i * w + w - 1.5, 0, 1.5, size);
+      bctx.fillStyle = i % 2 === 0 ? '#9c9c9c' : '#646464';
       bctx.fillRect(i * w, 0, w, size);
     }
 
+    // Top/bottom heavy steel corner header rails & center weld seam
     ctx.fillStyle = darkHex;
-    ctx.fillRect(0, 0, size, 14);
-    ctx.fillRect(0, size - 14, size, 14);
-    ctx.fillRect(0, 0, 12, size);
-    ctx.fillRect(size - 12, 0, 12, size);
+    ctx.fillRect(0, 0, size, 16);
+    ctx.fillRect(0, size - 16, size, 16);
+    ctx.fillRect(0, 0, 10, size);
+    ctx.fillRect(size - 10, 0, 10, size);
+    ctx.fillStyle = 'rgba(255,255,255,0.11)';
+    ctx.fillRect(0, 16, size, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, 127, size, 2);
+    bctx.fillStyle = '#5c5c5c';
+    bctx.fillRect(0, 0, size, 16);
+    bctx.fillRect(0, size - 16, size, 16);
 
-    ctx.fillStyle = stencilHex;
-    ctx.globalAlpha = 0.72;
-    ctx.font = 'bold 20px monospace';
-    ctx.fillText('COLDBORE', 26, 52);
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('40FT • ISO', 26, 72);
-    ctx.globalAlpha = 1.0;
-
-    return this._finalizePbr(c, b, rx, ry, 3.1, 130);
+    return this._finalizePbr(c, b, rx, ry, 1.45, 198);
   }
 
   _buildCrate(rx, ry) {
@@ -1423,35 +1508,99 @@ export class TextureLibrary {
     const bctx = b.getContext('2d');
     const rand = seededNoise(303);
 
-    ctx.fillStyle = '#926942';
+    ctx.fillStyle = '#8b6239';
     ctx.fillRect(0, 0, size, size);
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let y = 0; y < size; y += 32) {
-      ctx.fillStyle = y % 64 === 0 ? '#9c734b' : '#855d38';
-      ctx.fillRect(0, y, size, 30);
-      bctx.fillStyle = y % 64 === 0 ? '#a2a2a2' : '#6e6e6e';
-      bctx.fillRect(0, y, size, 30);
-    }
-    for (let i = 0; i < 650; i++) {
-      ctx.fillStyle = 'rgba(48, 30, 14, 0.16)';
-      ctx.fillRect(rand() * size, rand() * size, 22, 2);
+    // 4 wide crisp timber planks with clear horizontal seams & rich natural woodgrain
+    const plankColors = ['#9c7246', '#8d643a', '#a3784b', '#865d35'];
+    const plankH = size / 4;
+    for (let p = 0; p < 4; p++) {
+      const py = p * plankH;
+      ctx.fillStyle = plankColors[p % plankColors.length];
+      ctx.fillRect(0, py, size, plankH - 3);
+      bctx.fillStyle = p % 2 === 0 ? '#8a8a8a' : '#7b7b7b';
+      bctx.fillRect(0, py, size, plankH - 3);
+
+      // Rich crisp horizontal timber woodgrain fibers within each plank
+      for (let gy = py + 3; gy < py + plankH - 5; gy += 3) {
+        const isDark = rand() < 0.55;
+        ctx.fillStyle = isDark ? 'rgba(54, 33, 14, 0.24)' : 'rgba(196, 152, 98, 0.22)';
+        const startX = rand() * 32;
+        ctx.fillRect(0, gy, size, 1.2);
+        ctx.fillStyle = isDark ? 'rgba(42, 24, 9, 0.28)' : 'rgba(212, 168, 112, 0.2)';
+        ctx.fillRect(startX, gy + 1, 80 + rand() * 120, 1);
+
+        const hv = isDark ? 120 : 134;
+        bctx.fillStyle = `rgb(${hv},${hv},${hv})`;
+        bctx.fillRect(0, gy, size, 1);
+      }
+
+      // Subtle timber knot per plank
+      const kx = 48 + rand() * 160;
+      const ky = py + 16 + rand() * 28;
+      ctx.fillStyle = 'rgba(58, 35, 16, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(kx, ky, 9, 4, 0.08, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Clear dark plank seam groove
+      ctx.fillStyle = '#3b2410';
+      ctx.fillRect(0, py + plankH - 3, size, 3);
+      bctx.fillStyle = '#525252';
+      bctx.fillRect(0, py + plankH - 3, size, 3);
     }
 
-    ctx.strokeStyle = '#573a20';
+    // Crisp diagonal reinforcement batten across inner crate face
+    ctx.strokeStyle = '#664424';
     ctx.lineWidth = 18;
-    ctx.strokeRect(9, 9, size - 18, size - 18);
-    bctx.strokeStyle = '#d0d0d0';
+    ctx.beginPath();
+    ctx.moveTo(16, size - 16);
+    ctx.lineTo(size - 16, 16);
+    ctx.stroke();
+    ctx.strokeStyle = '#402813';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(8, size - 24);
+    ctx.lineTo(size - 24, 8);
+    ctx.moveTo(24, size - 8);
+    ctx.lineTo(size - 8, 24);
+    ctx.stroke();
+    bctx.strokeStyle = '#9a9a9a';
     bctx.lineWidth = 16;
-    bctx.strokeRect(9, 9, size - 18, size - 18);
+    bctx.beginPath();
+    bctx.moveTo(16, size - 16);
+    bctx.lineTo(size - 16, 16);
+    bctx.stroke();
 
-    ctx.fillStyle = '#334155';
+    // Framed outer timber battens with crisp mitered dark groove
+    ctx.strokeStyle = '#5d3e20';
+    ctx.lineWidth = 20;
+    ctx.strokeRect(10, 10, size - 20, size - 20);
+    ctx.strokeStyle = '#36200d';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, size - 40, size - 40);
+
+    bctx.strokeStyle = '#a4a4a4';
+    bctx.lineWidth = 18;
+    bctx.strokeRect(10, 10, size - 20, size - 20);
+    bctx.strokeStyle = '#505050';
+    bctx.lineWidth = 2;
+    bctx.strokeRect(20, 20, size - 40, size - 40);
+
+    // Matte steel corner brackets & bolt heads
     for (const [bx, by] of [[0, 0], [size - 24, 0], [0, size - 24], [size - 24, size - 24]]) {
+      ctx.fillStyle = '#2d3748';
       ctx.fillRect(bx, by, 24, 24);
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(bx + 5, by + 5, 4, 4);
+      ctx.fillRect(bx + 15, by + 15, 4, 4);
+      bctx.fillStyle = '#9c9c9c';
+      bctx.fillRect(bx, by, 24, 24);
     }
 
-    return this._finalizePbr(c, b, rx, ry, 2.7, 190);
+    return this._finalizePbr(c, b, rx, ry, 1.8, 225);
   }
 
   _buildSnow(rx, ry) {
@@ -1462,24 +1611,31 @@ export class TextureLibrary {
     const bctx = b.getContext('2d');
     const rand = seededNoise(505);
 
-    ctx.fillStyle = '#d7e2ee';
+    ctx.fillStyle = '#dce6f2';
     ctx.fillRect(0, 0, size, size);
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 3600; i++) {
-      const g = Math.floor(204 + rand() * 44);
-      const x = rand() * size;
-      const y = rand() * size;
-      ctx.fillStyle = `rgb(${g},${g + 5},${Math.min(255, g + 12)})`;
-      ctx.fillRect(x, y, 2.5, 2.5);
-
-      const bv = Math.floor(110 + rand() * 38);
+    // Subtle soft windblown snowdrift shading (dry matte snow, zero plastic shimmer)
+    for (let y = 0; y < size; y += 4) {
+      const drift = Math.sin(y * 0.08) * 6;
+      const g = Math.min(248, Math.max(204, Math.round(224 + drift)));
+      ctx.fillStyle = `rgb(${g},${g + 5},${Math.min(255, g + 10)})`;
+      ctx.fillRect(0, y, size, 4);
+      const bv = Math.round(128 + drift * 0.8);
       bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
-      bctx.fillRect(x, y, 2.5, 2.5);
+      bctx.fillRect(0, y, size, 4);
     }
 
-    return this._finalizePbr(c, b, rx, ry, 2.0, 170);
+    for (let i = 0; i < 2800; i++) {
+      const g = Math.floor(214 + rand() * 34);
+      const x = rand() * size;
+      const y = rand() * size;
+      ctx.fillStyle = `rgb(${g},${g + 4},${Math.min(255, g + 9)})`;
+      ctx.fillRect(x, y, 2.2, 2.2);
+    }
+
+    return this._finalizePbr(c, b, rx, ry, 1.25, 222);
   }
 
   _buildSteel(rx, ry) {
@@ -1495,19 +1651,19 @@ export class TextureLibrary {
     bctx.fillStyle = '#808080';
     bctx.fillRect(0, 0, size, size);
 
-    for (let i = 0; i < 1800; i++) {
+    for (let i = 0; i < 1600; i++) {
       const g = Math.floor(62 + rand() * 34);
       const x = rand() * size;
       const y = rand() * size;
       ctx.fillStyle = `rgb(${g},${g + 6},${g + 12})`;
       ctx.fillRect(x, y, 14, 1.5);
-      bctx.fillStyle = i % 2 === 0 ? '#9c9c9c' : '#666666';
+      bctx.fillStyle = i % 2 === 0 ? '#8c8c8c' : '#747474';
       bctx.fillRect(x, y, 14, 1.5);
     }
     ctx.strokeStyle = 'rgba(15, 23, 42, 0.48)';
     ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, size - 4, size - 4);
-    return this._finalizePbr(c, b, rx, ry, 2.4, 110);
+    return this._finalizePbr(c, b, rx, ry, 1.6, 152);
   }
 
   _buildTankArmor(rx, ry) {
@@ -1528,13 +1684,13 @@ export class TextureLibrary {
       const rx0 = Math.floor(rand() * 8) * 32;
       const ry0 = Math.floor(rand() * 8) * 32;
       ctx.fillRect(rx0, ry0, 48, 32);
-      bctx.fillStyle = i % 2 === 0 ? '#969696' : '#686868';
+      bctx.fillStyle = i % 2 === 0 ? '#8c8c8c' : '#747474';
       bctx.fillRect(rx0, ry0, 48, 32);
     }
     ctx.strokeStyle = 'rgba(20, 26, 20, 0.35)';
     ctx.lineWidth = 3;
     ctx.strokeRect(2, 2, size - 4, size - 4);
-    return this._finalizePbr(c, b, rx, ry, 2.5, 125);
+    return this._finalizePbr(c, b, rx, ry, 1.7, 196);
   }
 
   dispose() {

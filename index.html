@@ -165,7 +165,7 @@
       <div class="panel-header">
         <div>
           <h2 id="sb-title">SCOREBOARD</h2>
-          <p class="panel-sub" id="sb-subtitle">Sunlit Cargo Harbor • Free-For-All</p>
+          <p class="panel-sub" id="sb-subtitle">Sunlit Cargo Harbor · Free-For-All</p>
         </div>
         <button class="close-btn hidden" id="btn-close-sb">&times;</button>
       </div>
@@ -184,198 +184,234 @@
       <div class="sb-footer hidden" id="sb-round-end-actions">
         <div class="winner-banner" id="sb-winner-text">ROUND COMPLETE</div>
         <div class="btn-row">
-          <button class="btn-primary" id="btn-next-round">PLAY AGAIN</button>
-          <button class="btn-secondary" id="btn-leave-match">MAIN LOBBY</button>
+          <button class="btn-primary wood-btn" id="btn-next-round">PLAY AGAIN</button>
+          <button class="btn-secondary wood-btn-subtle" id="btn-leave-match">MAIN LOBBY</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Main Menu / Lobby -->
+  <!-- Dynamic Fullscreen 3D Game Lobby -->
   <div id="menu-overlay" class="menu-overlay">
     <div class="menu-shell">
       <header class="menu-header">
         <div class="menu-brand">
-          <h1>PROJECT COLDBORE</h1>
-          <p class="menu-sub">2–5 Player Photorealistic Tactical FPS &amp; Armored Arena</p>
+          <div class="brand-title-row">
+            <h1>PROJECT COLDBORE</h1>
+            <span class="conn-label" id="firebase-status-pill">ONLINE</span>
+          </div>
+          <p class="menu-sub">Tactical Arena Shooter · Harbor · Desert Temple · Alpine Peak</p>
         </div>
+
+        <nav class="lobby-nav" id="lobby-nav" role="tablist" aria-label="Lobby Sections">
+          <button type="button" class="nav-tab wood-tab active" data-tab="play">PLAY ARENA</button>
+          <button type="button" class="nav-tab wood-tab" data-tab="armory">ARMORY &amp; SKINS</button>
+          <button type="button" class="nav-tab wood-tab" data-tab="multiplayer">MULTIPLAYER (2–5)</button>
+        </nav>
+
         <div class="graphics-tier-bar" id="menu-graphics-bar" role="group" aria-label="Graphics Tier">
-          <span class="tier-bar-label">GRAPHICS:</span>
-          <button type="button" class="tier-btn" data-quality="ultra">ULTRA 4K</button>
-          <button type="button" class="tier-btn active" data-quality="balanced">HIGH (BALANCED)</button>
-          <button type="button" class="tier-btn" data-quality="fast">HD PERFORMANCE</button>
+          <button type="button" class="tier-btn wood-chip" data-quality="fast">720p LOW POLY</button>
+          <button type="button" class="tier-btn wood-chip active" data-quality="balanced">HD CLEAN</button>
+          <button type="button" class="tier-btn wood-chip" data-quality="ultra">4K ULTRA (PC)</button>
         </div>
       </header>
 
-      <div class="menu-grid">
-        <!-- Column 1: Solo Practice & Deployment -->
-        <section class="panel menu-card">
-          <div class="card-head">
-            <h2>SOLO DEPLOYMENT</h2>
-            <span class="conn-label" id="firebase-status-pill">ONLINE</span>
-          </div>
-
-          <div class="auth-box" id="auth-box">
-            <div class="user-profile hidden" id="user-profile">
-              <img id="user-avatar" src="" alt="" />
-              <div class="user-meta">
-                <div class="user-name" id="user-name">Operator</div>
-                <div class="user-email" id="user-email">Google Account</div>
-              </div>
-              <button class="btn-ghost" id="btn-signout">Sign Out</button>
-            </div>
-
-            <div class="signin-prompt" id="signin-prompt">
-              <button class="btn-google" id="btn-google-login">
-                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="#4285F4" d="M23.7 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.6c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.6-5.2 3.6-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.2c-.2-.7-.4-1.5-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c1-2.9 3.7-5 6.8-5z"/></svg>
-                <span>Sign in with Google</span>
+      <main class="lobby-stage">
+        <!-- Tab 1: PLAY / SOLO PRACTICE (Open 3D Arena Backdrop on Right!) -->
+        <section class="lobby-pane active" id="pane-play">
+          <div class="panel lobby-card">
+            <div class="card-head">
+              <h2>DEPLOY TO ARENA</h2>
+              <button type="button" class="wood-pill-link" id="btn-quick-armory">
+                <span id="armory-quick-badge">VANGUARD · FACTORY</span>
               </button>
             </div>
-          </div>
 
-          <div class="section-sep">PRACTICE VS AI</div>
-          <div class="form-row">
-            <label for="practice-map">Theater / Arena (230m–250m Scale)</label>
-            <select id="practice-map">
-              <option value="harbor">Sunlit Cargo Harbor (Moving Ship, Beach &amp; Forklifts)</option>
-              <option value="desert">Sunken Desert Temple (Sculptures, Vases &amp; Columns)</option>
+            <div class="auth-box" id="auth-box">
+              <div class="user-profile hidden" id="user-profile">
+                <img id="user-avatar" src="" alt="" />
+                <div class="user-meta">
+                  <div class="user-name" id="user-name">Operator</div>
+                  <div class="user-email" id="user-email">Google Account</div>
+                </div>
+                <button class="wood-btn-subtle btn-sm" id="btn-signout">Sign Out</button>
+              </div>
+
+              <div class="signin-prompt" id="signin-prompt">
+                <button class="btn-google" id="btn-google-login">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M23.7 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.6c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.6-5.2 3.6-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.2c-.2-.7-.4-1.5-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c1-2.9 3.7-5 6.8-5z"/></svg>
+                  <span>Sign in with Google</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="section-sep">SELECT MAP (LIVE 3D PREVIEW)</div>
+            <div class="map-pill-grid" id="map-pill-grid">
+              <button type="button" class="map-pill wood-chip active" data-map="harbor">
+                <span class="mp-title">CARGO HARBOR</span>
+                <span class="mp-sub">Ship · Cove · Cranes</span>
+              </button>
+              <button type="button" class="map-pill wood-chip" data-map="desert">
+                <span class="mp-title">DESERT TEMPLE</span>
+                <span class="mp-sub">Sanctuary · Palms · Vases</span>
+              </button>
+              <button type="button" class="map-pill wood-chip" data-map="snow">
+                <span class="mp-title">GLACIER PEAK</span>
+                <span class="mp-sub">Viaduct · Snowcats · Ice</span>
+              </button>
+            </div>
+            <select id="practice-map" class="sr-select" aria-label="Theater / Arena">
+              <option value="harbor" selected>Sunlit Cargo Harbor (Ship, Cove &amp; Cranes)</option>
+              <option value="desert">Desert Stepped Temple (Sanctuary, Obelisks &amp; Vases)</option>
               <option value="snow">Alpine Glacier Viaduct (Snowcats, Bridges &amp; Snowfall)</option>
             </select>
-          </div>
-          <div class="form-row three-col">
-            <div>
-              <label for="practice-bots">Opponents</label>
-              <select id="practice-bots">
-                <option value="1">1v1 (1 Bot)</option>
-                <option value="2">3P (2 Bots)</option>
-                <option value="3" selected>4P (3 Bots)</option>
-                <option value="4">5P (4 Bots)</option>
-              </select>
-            </div>
-            <div>
-              <label for="practice-difficulty">AI Tactical Skill</label>
-              <select id="practice-difficulty">
-                <option value="casual">Casual (Relaxed)</option>
-                <option value="tactical" selected>Tactical (Cover &amp; Burst)</option>
-                <option value="veteran">Veteran (Flank &amp; Peek)</option>
-              </select>
-            </div>
-            <div>
-              <label for="practice-kills">Kill Limit</label>
-              <select id="practice-kills">
-                <option value="10">10 Kills</option>
-                <option value="15" selected>15 Kills</option>
-                <option value="20">20 Kills</option>
-              </select>
-            </div>
-          </div>
-          <button class="btn-primary full-width" id="btn-start-practice">PLAY PRACTICE</button>
-        </section>
 
-        <!-- Column 2: Interactive 3D Operator & Armory Bay -->
-        <section class="panel menu-card armory-card">
-          <div class="card-head">
-            <h2>OPERATOR &amp; ARMORY BAY</h2>
-            <span class="armory-tag" id="armory-active-tag">VANGUARD · FACTORY</span>
-          </div>
-
-          <div class="preview-viewport-wrap">
-            <canvas id="loadout-preview-canvas" width="420" height="210"></canvas>
-            <div class="preview-tabs" id="preview-target-tabs">
-              <button type="button" class="p-tab active" data-target="operator">OPERATOR</button>
-              <button type="button" class="p-tab" data-target="rifle">M4A1</button>
-              <button type="button" class="p-tab" data-target="shotgun">M1014</button>
-              <button type="button" class="p-tab" data-target="sniper">AWP</button>
-              <button type="button" class="p-tab" data-target="pistol">USP-S</button>
-            </div>
-          </div>
-
-          <div class="form-row two-col" style="margin-top: 10px;">
-            <div>
-              <label for="loadout-operator">Operator Rig (6 Classes)</label>
-              <select id="loadout-operator">
-                <option value="vanguard" selected>VANGUARD (Heavy Assault)</option>
-                <option value="spectre">SPECTRE (Recon Marksman)</option>
-                <option value="nomad">NOMAD (Desert Specialist)</option>
-                <option value="frost">FROST (Alpine Arctic)</option>
-                <option value="corsair">CORSAIR (Harbor Breacher)</option>
-                <option value="titan">TITAN (Armored EOD)</option>
-              </select>
-            </div>
-            <div>
-              <label for="loadout-skin">Blueprint Skin (10 Finishes)</label>
-              <select id="loadout-skin">
-                <option value="factory" selected>Factory Tactical (Parkerized)</option>
-                <option value="carbon">Forged Carbon (2x2 Twill)</option>
-                <option value="desert_viper">Desert Viper (Arid Camo)</option>
-                <option value="arctic_wolf">Arctic Wolf (Splinter Snow)</option>
-                <option value="abyssal">Abyssal Maritime (Naval Spec)</option>
-                <option value="woodland">Woodland Stalker (Forest)</option>
-                <option value="ceramic">Ballistic Cermet (White Hex)</option>
-                <option value="crimson">Crimson Vanguard (Anodized)</option>
-                <option value="cobalt">Cobalt Prototype (PVD Blue)</option>
-                <option value="damascus">Damascus Valor (Folded Steel)</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <!-- Column 3: Multiplayer Lobby -->
-        <section class="panel menu-card">
-          <div class="card-head">
-            <h2>MULTIPLAYER LOBBY (2–5)</h2>
-            <button class="btn-ghost" id="btn-refresh-rooms">Refresh</button>
-          </div>
-
-          <div class="create-room-box">
-            <div class="form-row two-col">
+            <div class="form-row three-col" style="margin-top: 10px;">
               <div>
-                <label for="mp-map">Arena</label>
-                <select id="mp-map">
-                  <option value="harbor">Sunlit Cargo Harbor</option>
-                  <option value="desert">Sunken Desert Temple</option>
-                  <option value="snow">Alpine Glacier Viaduct</option>
+                <label for="practice-bots">Opponents</label>
+                <select id="practice-bots">
+                  <option value="1">1v1 (1 Bot)</option>
+                  <option value="2">3P (2 Bots)</option>
+                  <option value="3" selected>4P (3 Bots)</option>
+                  <option value="4">5P (4 Bots)</option>
                 </select>
               </div>
               <div>
-                <label for="mp-rules">Match Rules</label>
-                <select id="mp-rules">
-                  <option value="15-180" selected>15 Kills · 3 Min</option>
-                  <option value="10-120">10 Kills · 2 Min</option>
-                  <option value="20-300">20 Kills · 5 Min</option>
+                <label for="practice-difficulty">AI Skill</label>
+                <select id="practice-difficulty">
+                  <option value="casual">Casual</option>
+                  <option value="tactical" selected>Tactical</option>
+                  <option value="veteran">Veteran</option>
+                </select>
+              </div>
+              <div>
+                <label for="practice-kills">Goal</label>
+                <select id="practice-kills">
+                  <option value="10">10 Kills</option>
+                  <option value="15" selected>15 Kills</option>
+                  <option value="20">20 Kills</option>
                 </select>
               </div>
             </div>
-            <div class="join-code-row">
-              <button class="btn-accent" id="btn-create-room">CREATE ROOM</button>
-              <input type="text" id="input-room-code" placeholder="CODE" maxlength="6" />
-              <button class="btn-secondary" id="btn-join-code">JOIN</button>
-            </div>
-          </div>
 
-          <div id="mp-feedback" class="mp-feedback hidden"></div>
-
-          <div class="room-list" id="room-list">
-            <div class="room-empty">Sign in with Google to create or join a 2–5 player room.</div>
-          </div>
-
-          <div class="waiting-room hidden" id="waiting-room">
-            <div class="waiting-header">
-              <div>
-                <div class="room-code-tag">ROOM <span id="wr-code">-----</span></div>
-                <div class="wr-meta" id="wr-meta">Sunlit Cargo Harbor • First to 15</div>
-              </div>
-              <button class="btn-ghost" id="btn-leave-room">Leave</button>
-            </div>
-            <div class="wr-players" id="wr-players"></div>
-            <button class="btn-primary full-width hidden" id="btn-start-mp-match">START MATCH</button>
-            <div class="wr-wait-note" id="wr-wait-note">Waiting for host to start match...</div>
+            <button class="btn-primary wood-btn full-width deploy-cta" id="btn-start-practice">PLAY PRACTICE MATCH</button>
           </div>
         </section>
-      </div>
+
+        <!-- Tab 2: FULL UNDISTORTED 3D OPERATOR & WEAPON ARMORY -->
+        <section class="lobby-pane hidden" id="pane-armory">
+          <div class="armory-layout">
+            <div class="panel armory-controls-card">
+              <div class="card-head">
+                <h2>OPERATOR &amp; SKINS</h2>
+                <span class="armory-tag" id="armory-active-tag">VANGUARD · FACTORY</span>
+              </div>
+
+              <div class="form-row">
+                <label for="loadout-operator">Operator Rig (6 Classes)</label>
+                <select id="loadout-operator">
+                  <option value="vanguard" selected>VANGUARD (Heavy Assault)</option>
+                  <option value="spectre">SPECTRE (Recon Marksman)</option>
+                  <option value="nomad">NOMAD (Desert Specialist)</option>
+                  <option value="frost">FROST (Alpine Arctic)</option>
+                  <option value="corsair">CORSAIR (Harbor Breacher)</option>
+                  <option value="titan">TITAN (Armored EOD)</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="loadout-skin">Blueprint Finish (10 Skins)</label>
+                <select id="loadout-skin">
+                  <option value="factory" selected>Factory Tactical (Parkerized)</option>
+                  <option value="carbon">Forged Carbon (2x2 Twill)</option>
+                  <option value="desert_viper">Desert Viper (Arid Camo)</option>
+                  <option value="arctic_wolf">Arctic Wolf (Splinter Snow)</option>
+                  <option value="abyssal">Abyssal Maritime (Naval Spec)</option>
+                  <option value="woodland">Woodland Stalker (Forest)</option>
+                  <option value="ceramic">Ballistic Cermet (White Hex)</option>
+                  <option value="crimson">Crimson Vanguard (Anodized)</option>
+                  <option value="cobalt">Cobalt Prototype (PVD Blue)</option>
+                  <option value="damascus">Damascus Valor (Folded Steel)</option>
+                </select>
+              </div>
+
+              <div class="armory-hint">Drag 3D viewport to inspect 360°. Changes apply immediately in-game.</div>
+              <button type="button" class="btn-primary wood-btn full-width" id="btn-armory-back" style="margin-top: 12px;">READY · BACK TO DEPLOY</button>
+            </div>
+
+            <div class="panel armory-stage-card">
+              <div class="preview-viewport-wrap">
+                <canvas id="loadout-preview-canvas"></canvas>
+                <div class="preview-tabs" id="preview-target-tabs">
+                  <button type="button" class="p-tab wood-chip active" data-target="operator">OPERATOR</button>
+                  <button type="button" class="p-tab wood-chip" data-target="rifle">M4A1</button>
+                  <button type="button" class="p-tab wood-chip" data-target="shotgun">M1014</button>
+                  <button type="button" class="p-tab wood-chip" data-target="sniper">AWP</button>
+                  <button type="button" class="p-tab wood-chip" data-target="pistol">USP-S</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 3: MULTIPLAYER LOBBY -->
+        <section class="lobby-pane hidden" id="pane-multiplayer">
+          <div class="panel lobby-card mp-card">
+            <div class="card-head">
+              <h2>MULTIPLAYER LOBBY (2–5)</h2>
+              <button class="wood-btn-subtle btn-sm" id="btn-refresh-rooms">Refresh</button>
+            </div>
+
+            <div class="create-room-box">
+              <div class="form-row two-col">
+                <div>
+                  <label for="mp-map">Arena</label>
+                  <select id="mp-map">
+                    <option value="harbor">Sunlit Cargo Harbor</option>
+                    <option value="desert">Desert Stepped Temple</option>
+                    <option value="snow">Alpine Glacier Viaduct</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="mp-rules">Match Rules</label>
+                  <select id="mp-rules">
+                    <option value="15-180" selected>15 Kills · 3 Min</option>
+                    <option value="10-120">10 Kills · 2 Min</option>
+                    <option value="20-300">20 Kills · 5 Min</option>
+                  </select>
+                </div>
+              </div>
+              <div class="join-code-row">
+                <button class="btn-accent wood-btn-blue" id="btn-create-room">CREATE ROOM</button>
+                <input type="text" id="input-room-code" placeholder="CODE" maxlength="6" />
+                <button class="wood-btn-subtle" id="btn-join-code">JOIN</button>
+              </div>
+            </div>
+
+            <div id="mp-feedback" class="mp-feedback hidden"></div>
+
+            <div class="room-list" id="room-list">
+              <div class="room-empty">Sign in with Google to create or join a 2–5 player room.</div>
+            </div>
+
+            <div class="waiting-room hidden" id="waiting-room">
+              <div class="waiting-header">
+                <div>
+                  <div class="room-code-tag">ROOM <span id="wr-code">-----</span></div>
+                  <div class="wr-meta" id="wr-meta">Sunlit Cargo Harbor · First to 15</div>
+                </div>
+                <button class="wood-btn-subtle btn-sm" id="btn-leave-room">Leave</button>
+              </div>
+              <div class="wr-players" id="wr-players"></div>
+              <button class="btn-primary wood-btn full-width hidden" id="btn-start-mp-match">START MATCH</button>
+              <div class="wr-wait-note" id="wr-wait-note">Waiting for host to start match...</div>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <footer class="menu-footer">
-        <button class="btn-ghost" id="btn-open-settings">Settings &amp; Controls</button>
+        <button class="wood-btn-subtle btn-sm" id="btn-open-settings">Settings &amp; Controls</button>
         <span class="controls-summary">WASD Move · Mouse/Touch Aim · 1–4 Weapons · G Frag · E Tank · R Reload · Tab Score</span>
       </footer>
     </div>
@@ -391,11 +427,11 @@
 
       <div class="settings-body">
         <div class="form-row">
-          <label for="setting-quality">Graphics Preset (3 Tiers — Live Switchable)</label>
+          <label for="setting-quality">Graphics Preset (Live Switchable)</label>
           <select id="setting-quality">
-            <option value="ultra">ULTRA 4K (Native 4K · Clearcoat PBR · 4096px Shadows · 100% Details)</option>
-            <option value="balanced" selected>HIGH (BALANCED) (FHD/QHD · Standard PBR · 1024px Shadows · 75% Vegetation)</option>
-            <option value="fast">HD PERFORMANCE (LOW DETAILS) (720p HD · Lambert Shaders · No Shadows · Max FPS)</option>
+            <option value="fast">720p LOW POLY (Clean Venge Style · No Shadows · Best Mobile/iPad FPS)</option>
+            <option value="balanced" selected>HD CLEAN (Crisp 1080p PBR · Grass &amp; Foliage · Sharp Shadows)</option>
+            <option value="ultra" id="opt-quality-ultra">4K ULTRA (PC ONLY · 4096px Shadows · Max Details)</option>
           </select>
         </div>
 
@@ -426,7 +462,7 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn-primary" id="btn-resume-game">APPLY &amp; RESUME</button>
+        <button class="btn-primary wood-btn" id="btn-resume-game">APPLY &amp; RESUME</button>
         <button class="btn-danger hidden" id="btn-quit-match">LEAVE MATCH</button>
       </div>
     </div>

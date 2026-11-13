@@ -30,6 +30,7 @@ export function getArchitecturePalette(textureLib = null, quality = 'balanced') 
     if (byQuality.has(q)) return byQuality.get(q);
 
     const aniso = q === 'ultra' ? 8 : q === 'balanced' ? 4 : 1;
+    const ns = new THREE.Vector2(q === 'ultra' ? 0.32 : 0.24, q === 'ultra' ? 0.32 : 0.24);
     const concreteTex = textureLib.getTextureSet('concrete', 2, 2, aniso);
     const concreteWideTex = textureLib.getTextureSet('concrete', 4, 2, aniso);
     const sandstoneTex = textureLib.getTextureSet('sandstone', 2, 2, aniso);
@@ -44,165 +45,194 @@ export function getArchitecturePalette(textureLib = null, quality = 'balanced') 
 
     const palette = {
       concrete: createQualityMaterial({
-        color: 0xb6bec8,
+        color: 0xc2cad4,
         map: concreteTex.map,
         normalMap: concreteTex.normalMap,
+        normalScale: ns,
         roughnessMap: concreteTex.roughnessMap,
-        roughness: 0.78,
-        metalness: 0.08,
-        clearcoat: 0.05
+        roughness: 0.84,
+        metalness: 0.04,
+        clearcoat: 0
       }, q),
       concreteWall: createQualityMaterial({
-        color: 0xaab3be,
+        color: 0xb6c0cb,
         map: concreteWideTex.map,
         normalMap: concreteWideTex.normalMap,
+        normalScale: ns,
         roughnessMap: concreteWideTex.roughnessMap,
-        roughness: 0.76,
-        metalness: 0.08,
-        clearcoat: 0.06
+        roughness: 0.82,
+        metalness: 0.04,
+        clearcoat: 0
       }, q),
       concreteDark: createQualityMaterial({
-        color: 0x64707d,
+        color: 0x6b7785,
         map: concreteTex.map,
         normalMap: concreteTex.normalMap,
+        normalScale: ns,
         roughnessMap: concreteTex.roughnessMap,
-        roughness: 0.82,
-        metalness: 0.12
+        roughness: 0.85,
+        metalness: 0.08,
+        clearcoat: 0
       }, q),
       sandstone: createQualityMaterial({
-        color: 0xdcc092,
+        color: 0xe6cb9c,
         map: sandstoneTex.map,
         normalMap: sandstoneTex.normalMap,
+        normalScale: ns,
         roughnessMap: sandstoneTex.roughnessMap,
-        roughness: 0.84,
-        metalness: 0.05,
-        clearcoat: 0.04
+        roughness: 0.88,
+        metalness: 0.02,
+        clearcoat: 0
       }, q),
       sandstoneTrim: createQualityMaterial({
-        color: 0xb89664,
+        color: 0xc5a26d,
         map: sandstoneTex.map,
         normalMap: sandstoneTex.normalMap,
+        normalScale: ns,
         roughnessMap: sandstoneTex.roughnessMap,
-        roughness: 0.78,
-        metalness: 0.08
+        roughness: 0.84,
+        metalness: 0.04,
+        clearcoat: 0
       }, q),
       marble: createQualityMaterial({
-        color: 0xdce4ee,
+        color: 0xe2eaf2,
         map: marbleTex.map,
         normalMap: marbleTex.normalMap,
+        normalScale: ns,
         roughnessMap: marbleTex.roughnessMap,
-        roughness: 0.46,
-        metalness: 0.1,
-        clearcoat: 0.28
+        roughness: 0.56,
+        metalness: 0.06,
+        clearcoat: 0
       }, q),
       mossyStone: createQualityMaterial({
-        color: 0x848f83,
+        color: 0x8b968a,
         map: mossyTex.map,
         normalMap: mossyTex.normalMap,
+        normalScale: ns,
         roughnessMap: mossyTex.roughnessMap,
-        roughness: 0.84,
-        metalness: 0.06
+        roughness: 0.88,
+        metalness: 0.03,
+        clearcoat: 0
       }, q),
       steel: createQualityMaterial({
-        color: 0x64748b,
+        color: 0x6b7c93,
         map: steelTex.map,
         normalMap: steelTex.normalMap,
-        roughnessMap: steelTex.roughnessMap,
-        roughness: 0.42,
-        metalness: 0.68,
-        clearcoat: 0.22
-      }, q),
-      steelDark: createQualityMaterial({
-        color: 0x26313f,
-        map: steelTex.map,
-        normalMap: steelTex.normalMap,
+        normalScale: ns,
         roughnessMap: steelTex.roughnessMap,
         roughness: 0.38,
-        metalness: 0.74,
-        clearcoat: 0.25
+        metalness: 0.65,
+        clearcoat: 0
+      }, q),
+      steelDark: createQualityMaterial({
+        color: 0x2d3a4b,
+        map: steelTex.map,
+        normalMap: steelTex.normalMap,
+        normalScale: ns,
+        roughnessMap: steelTex.roughnessMap,
+        roughness: 0.36,
+        metalness: 0.68,
+        clearcoat: 0
       }, q),
       steelChrome: createQualityMaterial({
-        color: 0xcbd5e1,
+        color: 0xd8e1eb,
         map: steelTex.map,
         normalMap: steelTex.normalMap,
+        normalScale: ns,
         roughness: 0.24,
-        metalness: 0.86,
-        clearcoat: 0.45
-      }, q),
-      armorOlive: createQualityMaterial({
-        color: 0x5c6b50,
-        map: armorTex.map,
-        normalMap: armorTex.normalMap,
-        roughnessMap: armorTex.roughnessMap,
-        roughness: 0.52,
-        metalness: 0.42,
+        metalness: 0.78,
         clearcoat: 0.14
       }, q),
+      armorOlive: createQualityMaterial({
+        color: 0x627355,
+        map: armorTex.map,
+        normalMap: armorTex.normalMap,
+        normalScale: ns,
+        roughnessMap: armorTex.roughnessMap,
+        roughness: 0.58,
+        metalness: 0.34,
+        clearcoat: 0
+      }, q),
       rustMetal: createQualityMaterial({
-        color: 0x8f3f26,
+        color: 0x9c482c,
         map: steelTex.map,
         normalMap: steelTex.normalMap,
-        roughness: 0.68,
-        metalness: 0.46
+        normalScale: ns,
+        roughness: 0.62,
+        metalness: 0.55,
+        clearcoat: 0
       }, q),
       navalMetal: createQualityMaterial({
-        color: 0x1e4875,
+        color: 0x225184,
         map: steelTex.map,
         normalMap: steelTex.normalMap,
-        roughness: 0.48,
-        metalness: 0.55
+        normalScale: ns,
+        roughness: 0.44,
+        metalness: 0.58,
+        clearcoat: 0
       }, q),
       hazardAmber: createQualityMaterial({
-        color: 0xd97706,
+        color: 0xe28714,
         map: steelTex.map,
         normalMap: steelTex.normalMap,
+        normalScale: ns,
         roughness: 0.44,
-        metalness: 0.36
+        metalness: 0.38,
+        clearcoat: 0
       }, q),
       crimsonPaint: createQualityMaterial({
-        color: 0xb91c1c,
-        roughness: 0.55,
-        metalness: 0.22,
-        clearcoat: 0.18
+        color: 0xc22727,
+        roughness: 0.52,
+        metalness: 0.24,
+        clearcoat: 0
       }, q),
       emeraldPaint: createQualityMaterial({
         color: 0x10b981,
         emissive: 0x059669,
         emissiveIntensity: 0.35,
         roughness: 0.32,
-        metalness: 0.28
+        metalness: 0.28,
+        clearcoat: 0
       }, q),
       darkWood: createQualityMaterial({
-        color: 0x6e4b2e,
+        color: 0x6f4b2c,
         map: woodTex.map,
         normalMap: woodTex.normalMap,
+        normalScale: ns,
         roughnessMap: woodTex.roughnessMap,
-        roughness: 0.82,
-        metalness: 0.05
+        roughness: 0.86,
+        metalness: 0.02,
+        clearcoat: 0
       }, q),
       crateWood: createQualityMaterial({
-        color: 0xa67c52,
+        color: 0xb08252,
         map: crateTex.map,
         normalMap: crateTex.normalMap,
+        normalScale: ns,
         roughnessMap: crateTex.roughnessMap,
-        roughness: 0.76,
-        metalness: 0.08
+        roughness: 0.82,
+        metalness: 0.03,
+        clearcoat: 0
       }, q),
       snowCap: createQualityMaterial({
-        color: 0xe6eff8,
+        color: 0xeef5fc,
         map: snowTex.map,
         normalMap: snowTex.normalMap,
+        normalScale: ns,
         roughnessMap: snowTex.roughnessMap,
-        roughness: 0.72,
-        metalness: 0.04
+        roughness: 0.78,
+        metalness: 0.02,
+        clearcoat: 0
       }, q),
       stairTread: createQualityMaterial({
-        color: 0x475569,
+        color: 0x526072,
         map: deckTex.map,
         normalMap: deckTex.normalMap,
+        normalScale: ns,
         roughnessMap: deckTex.roughnessMap,
-        roughness: 0.56,
-        metalness: 0.48
+        roughness: 0.62,
+        metalness: 0.44,
+        clearcoat: 0
       }, q),
       windowGlass: new THREE.MeshPhysicalMaterial({
         color: 0x38bdf8,
@@ -235,40 +265,44 @@ export function getArchitecturePalette(textureLib = null, quality = 'balanced') 
         opacity: 0.28
       }),
       solarCell: createQualityMaterial({
-        color: 0x0f172a,
+        color: 0x132038,
         emissive: 0x1e3a8a,
         emissiveIntensity: 0.22,
-        roughness: 0.18,
-        metalness: 0.82,
-        clearcoat: 0.85
+        roughness: 0.2,
+        metalness: 0.78,
+        clearcoat: 0.65
       }, q),
       goldBronze: createQualityMaterial({
-        color: 0xd4a238,
+        color: 0xdba93b,
         emissive: 0x78500d,
-        emissiveIntensity: 0.14,
+        emissiveIntensity: 0.12,
         roughness: 0.28,
-        metalness: 0.84,
-        clearcoat: 0.55
+        metalness: 0.78,
+        clearcoat: 0.14
       }, q),
       terracotta: createQualityMaterial({
-        color: 0xc2633a,
+        color: 0xc96940,
         map: sandstoneTex.map,
         normalMap: sandstoneTex.normalMap,
-        roughness: 0.68,
-        metalness: 0.06,
-        clearcoat: 0.12
+        normalScale: ns,
+        roughness: 0.76,
+        metalness: 0.03,
+        clearcoat: 0
       }, q),
       terracottaDark: createQualityMaterial({
-        color: 0x7c361d,
+        color: 0x853d22,
         map: sandstoneTex.map,
         normalMap: sandstoneTex.normalMap,
-        roughness: 0.74,
-        metalness: 0.08
+        normalScale: ns,
+        roughness: 0.80,
+        metalness: 0.04,
+        clearcoat: 0
       }, q),
       rubberTire: createQualityMaterial({
-        color: 0x1c2128,
-        roughness: 0.86,
-        metalness: 0.12
+        color: 0x212730,
+        roughness: 0.88,
+        metalness: 0.08,
+        clearcoat: 0
       }, q),
       glacialIce: new THREE.MeshPhysicalMaterial({
         color: 0x93ddfd,
@@ -295,26 +329,26 @@ export function getArchitecturePalette(textureLib = null, quality = 'balanced') 
 
   if (_fallbackBankCache.has(q)) return _fallbackBankCache.get(q);
   const fallback = {
-    concrete: createQualityMaterial({ color: 0x9aa3ad, roughness: 0.78, metalness: 0.08 }, q),
-    concreteWall: createQualityMaterial({ color: 0x949ea8, roughness: 0.76, metalness: 0.08 }, q),
-    concreteDark: createQualityMaterial({ color: 0x525c68, roughness: 0.82, metalness: 0.12 }, q),
-    sandstone: createQualityMaterial({ color: 0xd6ba8b, roughness: 0.84, metalness: 0.05 }, q),
-    sandstoneTrim: createQualityMaterial({ color: 0xb08d5b, roughness: 0.78, metalness: 0.08 }, q),
-    marble: createQualityMaterial({ color: 0xd8e0ea, roughness: 0.44, metalness: 0.1, clearcoat: 0.28 }, q),
-    mossyStone: createQualityMaterial({ color: 0x6f7a6e, roughness: 0.84, metalness: 0.06 }, q),
-    steel: createQualityMaterial({ color: 0x526071, roughness: 0.42, metalness: 0.68, clearcoat: 0.22 }, q),
-    steelDark: createQualityMaterial({ color: 0x25303d, roughness: 0.38, metalness: 0.74, clearcoat: 0.25 }, q),
-    steelChrome: createQualityMaterial({ color: 0xcbd5e1, roughness: 0.24, metalness: 0.86, clearcoat: 0.45 }, q),
-    armorOlive: createQualityMaterial({ color: 0x4e5c43, roughness: 0.52, metalness: 0.42 }, q),
-    rustMetal: createQualityMaterial({ color: 0x8a3b22, roughness: 0.68, metalness: 0.45 }, q),
-    navalMetal: createQualityMaterial({ color: 0x1c456e, roughness: 0.48, metalness: 0.55 }, q),
-    hazardAmber: createQualityMaterial({ color: 0xd97706, roughness: 0.44, metalness: 0.36 }, q),
-    crimsonPaint: createQualityMaterial({ color: 0xb91c1c, roughness: 0.55, metalness: 0.22 }, q),
-    emeraldPaint: createQualityMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.35, roughness: 0.32, metalness: 0.28 }, q),
-    darkWood: createQualityMaterial({ color: 0x6b472a, roughness: 0.82, metalness: 0.05 }, q),
-    crateWood: createQualityMaterial({ color: 0x926942, roughness: 0.76, metalness: 0.08 }, q),
-    snowCap: createQualityMaterial({ color: 0xe2ecf5, roughness: 0.75, metalness: 0.04 }, q),
-    stairTread: createQualityMaterial({ color: 0x475569, roughness: 0.56, metalness: 0.48 }, q),
+    concrete: createQualityMaterial({ color: 0xb6bec8, roughness: 0.84, metalness: 0.04, clearcoat: 0 }, q),
+    concreteWall: createQualityMaterial({ color: 0xaab3be, roughness: 0.82, metalness: 0.04, clearcoat: 0 }, q),
+    concreteDark: createQualityMaterial({ color: 0x626e7b, roughness: 0.85, metalness: 0.08, clearcoat: 0 }, q),
+    sandstone: createQualityMaterial({ color: 0xe6cb9c, roughness: 0.88, metalness: 0.02, clearcoat: 0 }, q),
+    sandstoneTrim: createQualityMaterial({ color: 0xc5a26d, roughness: 0.84, metalness: 0.04, clearcoat: 0 }, q),
+    marble: createQualityMaterial({ color: 0xe2eaf2, roughness: 0.56, metalness: 0.06, clearcoat: 0 }, q),
+    mossyStone: createQualityMaterial({ color: 0x7b877a, roughness: 0.88, metalness: 0.03, clearcoat: 0 }, q),
+    steel: createQualityMaterial({ color: 0x617288, roughness: 0.38, metalness: 0.65, clearcoat: 0 }, q),
+    steelDark: createQualityMaterial({ color: 0x2c3849, roughness: 0.36, metalness: 0.68, clearcoat: 0 }, q),
+    steelChrome: createQualityMaterial({ color: 0xd8e1eb, roughness: 0.24, metalness: 0.78, clearcoat: 0.14 }, q),
+    armorOlive: createQualityMaterial({ color: 0x5c6d4f, roughness: 0.58, metalness: 0.34, clearcoat: 0 }, q),
+    rustMetal: createQualityMaterial({ color: 0x98462a, roughness: 0.62, metalness: 0.55, clearcoat: 0 }, q),
+    navalMetal: createQualityMaterial({ color: 0x225184, roughness: 0.44, metalness: 0.58, clearcoat: 0 }, q),
+    hazardAmber: createQualityMaterial({ color: 0xe28714, roughness: 0.44, metalness: 0.38, clearcoat: 0 }, q),
+    crimsonPaint: createQualityMaterial({ color: 0xc22727, roughness: 0.52, metalness: 0.24, clearcoat: 0 }, q),
+    emeraldPaint: createQualityMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.35, roughness: 0.32, metalness: 0.28, clearcoat: 0 }, q),
+    darkWood: createQualityMaterial({ color: 0x6f4b2c, roughness: 0.86, metalness: 0.02, clearcoat: 0 }, q),
+    crateWood: createQualityMaterial({ color: 0xb08252, roughness: 0.82, metalness: 0.03, clearcoat: 0 }, q),
+    snowCap: createQualityMaterial({ color: 0xeaf2fa, roughness: 0.78, metalness: 0.02, clearcoat: 0 }, q),
+    stairTread: createQualityMaterial({ color: 0x4f5d6f, roughness: 0.62, metalness: 0.44, clearcoat: 0 }, q),
     windowGlass: new THREE.MeshPhysicalMaterial({
       color: 0x38bdf8,
       emissive: 0x0c4a6e,
@@ -344,11 +378,11 @@ export function getArchitecturePalette(textureLib = null, quality = 'balanced') 
       transparent: true,
       opacity: 0.28
     }),
-    solarCell: createQualityMaterial({ color: 0x0f172a, emissive: 0x1e3a8a, emissiveIntensity: 0.22, roughness: 0.18, metalness: 0.82 }, q),
-    goldBronze: createQualityMaterial({ color: 0xd4a238, roughness: 0.28, metalness: 0.84, clearcoat: 0.5 }, q),
-    terracotta: createQualityMaterial({ color: 0xc2633a, roughness: 0.68, metalness: 0.06 }, q),
-    terracottaDark: createQualityMaterial({ color: 0x7c361d, roughness: 0.74, metalness: 0.08 }, q),
-    rubberTire: createQualityMaterial({ color: 0x1c2128, roughness: 0.86, metalness: 0.12 }, q),
+    solarCell: createQualityMaterial({ color: 0x132038, emissive: 0x1e3a8a, emissiveIntensity: 0.22, roughness: 0.2, metalness: 0.78 }, q),
+    goldBronze: createQualityMaterial({ color: 0xdba93b, roughness: 0.28, metalness: 0.78, clearcoat: 0.14 }, q),
+    terracotta: createQualityMaterial({ color: 0xc96940, roughness: 0.76, metalness: 0.03, clearcoat: 0 }, q),
+    terracottaDark: createQualityMaterial({ color: 0x853d22, roughness: 0.80, metalness: 0.04, clearcoat: 0 }, q),
+    rubberTire: createQualityMaterial({ color: 0x212730, roughness: 0.88, metalness: 0.08, clearcoat: 0 }, q),
     glacialIce: new THREE.MeshPhysicalMaterial({
       color: 0x93ddfd,
       emissive: 0x0ea5e9,
@@ -879,21 +913,43 @@ export function addWalkableBridgeArch(group, worldMeshes, colliders, {
     const halfDeckX = totalDeckW * 0.5;
 
     for (const xDir of [-1, 1]) {
-      // Stair stringer side cheeks
+      // Stair stringer side cheeks & slanted tubular handrails + stanchions
       const runLen = stepCount * treadDepth;
+      const slopeAngle = Math.atan2(deckTopY, runLen);
+      const railSpan = Math.hypot(runLen, deckTopY) + 0.14;
       for (const zSide of [-1, 1]) {
+        const edgeZ = zSide * (stairW * 0.5 + 0.06);
+        const midX = xDir * (halfDeckX + runLen * 0.5);
+
         const stringer = new THREE.Mesh(
           createBeveledBox(runLen + 0.2, 0.22, 0.12, 0.025, 2),
           pal.steelDark
         );
-        stringer.position.set(
-          xDir * (halfDeckX + runLen * 0.5),
-          deckTopY * 0.48,
-          zSide * (stairW * 0.5 + 0.06)
-        );
-        stringer.rotation.z = -xDir * Math.atan2(deckTopY, runLen);
+        stringer.position.set(midX, deckTopY * 0.48, edgeZ);
+        stringer.rotation.z = -xDir * slopeAngle;
         ctx.registerMesh(stringer, false);
         ctx.root.add(stringer);
+
+        const railTube = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.032, 0.032, railSpan, 10),
+          pal.steelChrome
+        );
+        railTube.position.set(midX, deckTopY * 0.5 + 0.90, edgeZ);
+        railTube.rotation.z = Math.PI * 0.5 - xDir * slopeAngle;
+        ctx.registerMesh(railTube, false);
+        ctx.root.add(railTube);
+
+        for (const t of [0.02, 0.5, 0.98]) {
+          const postX = xDir * (halfDeckX + (1 - t) * runLen);
+          const postY = t * deckTopY + 0.44;
+          const post = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.032, 0.036, 0.94, 8),
+            pal.steelDark
+          );
+          post.position.set(postX, postY, edgeZ);
+          ctx.registerMesh(post, false);
+          ctx.root.add(post);
+        }
       }
 
       for (let s = 1; s <= stepCount; s++) {
@@ -1123,6 +1179,7 @@ function addBuildingStaircaseBay(ctx, pal, {
 }) {
   const deckTopY = stepCount * stepRise; // 2.56m
   const runLength = stepCount * treadDepth;
+  const slopeAngle = Math.atan2(deckTopY, runLength);
 
   // Outer staircase safety railing & stringer beam
   const outerX = stairX + (stairX >= 0 ? 1 : -1) * (stairWidth * 0.5 + 0.08);
@@ -1132,19 +1189,31 @@ function addBuildingStaircaseBay(ctx, pal, {
     pal.steelDark
   );
   stringer.position.set(outerX, deckTopY * 0.48, midZ);
-  stringer.rotation.x = dirZ * Math.atan2(deckTopY, runLength);
+  stringer.rotation.x = -dirZ * slopeAngle;
   ctx.registerMesh(stringer, false);
   ctx.root.add(stringer);
 
-  // Slanted tubular handrail along outer stair edge
+  // Slanted tubular handrail along outer stair edge + 3 vertical stanchion posts
   const railTube = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.032, 0.032, Math.hypot(runLength, deckTopY), 10),
+    new THREE.CylinderGeometry(0.032, 0.032, Math.hypot(runLength, deckTopY) + 0.14, 10),
     pal.steelChrome
   );
-  railTube.position.set(outerX, deckTopY * 0.5 + 0.86, midZ);
-  railTube.rotation.x = dirZ * Math.atan2(deckTopY, runLength) + Math.PI * 0.5;
+  railTube.position.set(outerX, deckTopY * 0.5 + 0.90, midZ);
+  railTube.rotation.x = Math.PI * 0.5 - dirZ * slopeAngle;
   ctx.registerMesh(railTube, false);
   ctx.root.add(railTube);
+
+  for (const t of [0.02, 0.5, 0.98]) {
+    const postZ = startZ + dirZ * (t * runLength);
+    const postY = t * deckTopY + 0.44;
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.032, 0.036, 0.94, 8),
+      pal.steelDark
+    );
+    post.position.set(outerX, postY, postZ);
+    ctx.registerMesh(post, false);
+    ctx.root.add(post);
+  }
 
   for (let s = 1; s <= stepCount; s++) {
     const stepTopY = s * stepRise;
@@ -1191,6 +1260,15 @@ function addBuildingStaircaseBay(ctx, pal, {
     lz: landingZ + dirZ * 0.62,
     length: stairWidth + 0.16,
     alongZ: false,
+    height: 0.92,
+    withCollider: true
+  });
+  addSafetyRailing(ctx, pal, {
+    lx: outerX,
+    deckY: deckTopY,
+    lz: landingZ,
+    length: 1.32,
+    alongZ: true,
     height: 0.92,
     withCollider: true
   });
@@ -4225,4 +4303,564 @@ export function addIceSpireCluster(group, worldMeshes, colliders, {
   cluster.updateMatrixWorld(true);
   return cluster;
 }
+
+/**
+ * 9. Monumental Walkable Desert Temple (`addDesertTemple`)
+ * Ancient sunlit stepped sandstone temple (~18m x 18m footprint, ~6.5m height) featuring:
+ * - 3-tier walkable stepped limestone/sandstone plinth (y = 0 -> 1.20m) with wide N/S/E/W ceremonial stairs
+ * - Perimeter colonnade of 12 fluted sandstone columns with >= 4.2m wide cardinal portals
+ * - Layered carved sandstone entablature, warm cedar rafters, open sky-light gallery & solar lotus reliefs
+ * - Inner sanctum raised golden solar altar (top at y = 1.48m) + glowing bronze ember braziers
+ * - Windblown corner sand drifts
+ */
+export function addDesertTemple(group, worldMeshes, colliders, {
+  x = 0,
+  y = undefined,
+  z = 0,
+  yaw = 0,
+  quality = 'balanced',
+  castShadows = true,
+  textureLib = null,
+  terrainHeightFn = null
+} = {}) {
+  const baseY = y !== undefined ? y : (typeof terrainHeightFn === 'function' ? terrainHeightFn(x, z) : 0);
+  const pal = getArchitecturePalette(textureLib, quality);
+  const ctx = createBuilderContext(group, worldMeshes, colliders, {
+    x,
+    y: baseY,
+    z,
+    yaw,
+    castShadows
+  });
+
+  // Helper to place a bronze ember brazier bowl (pedestal optional)
+  const addBrazier = (lx, baseH, lz, withBase = true) => {
+    let bowlBaseY = baseH;
+    if (withBase) {
+      ctx.addBevelBox({
+        lx,
+        ly: baseH + 0.24,
+        lz,
+        w: 0.72,
+        h: 0.48,
+        d: 0.72,
+        bevel: 0.035,
+        segments: 2,
+        mat: pal.sandstoneTrim,
+        collider: true,
+        stepable: true,
+        exactMinY: true
+      });
+      bowlBaseY = baseH + 0.48;
+    }
+
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.24, 0.28, 10),
+      pal.goldBronze
+    );
+    stem.position.set(lx, bowlBaseY + 0.14, lz);
+    ctx.registerMesh(stem, false);
+    ctx.root.add(stem);
+
+    const bowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.20, 0.26, 12),
+      pal.goldBronze
+    );
+    bowl.position.set(lx, bowlBaseY + 0.36, lz);
+    ctx.registerMesh(bowl, false);
+    ctx.root.add(bowl);
+
+    const ember = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      pal.ledAmber
+    );
+    ember.position.set(lx, bowlBaseY + 0.44, lz);
+    ctx.registerMesh(ember, false);
+    ctx.root.add(ember);
+  };
+
+  // 1. Stepped Multi-Tier Walkable Sandstone Plinth (y = 0 -> 1.20m)
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 0.20,
+    lz: 0,
+    w: 18.6,
+    h: 0.40,
+    d: 18.6,
+    bevel: 0.045,
+    mat: pal.sandstoneTrim,
+    collider: true,
+    stepable: true,
+    exactMinY: false,
+    minYPad: 0.7
+  });
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 0.60,
+    lz: 0,
+    w: 16.8,
+    h: 0.40,
+    d: 16.8,
+    bevel: 0.04,
+    mat: pal.sandstone,
+    collider: true,
+    stepable: true,
+    exactMinY: true
+  });
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.00,
+    lz: 0,
+    w: 15.0,
+    h: 0.40,
+    d: 15.0,
+    bevel: 0.04,
+    mat: pal.sandstoneTrim,
+    collider: true,
+    stepable: true,
+    exactMinY: true
+  });
+
+  // Inlaid sanctuary stone walkway runners & bronze courtyard trim (visual polish)
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.208,
+    lz: 0,
+    w: 4.0,
+    h: 0.02,
+    d: 14.4,
+    bevel: 0.005,
+    segments: 2,
+    mat: pal.sandstone,
+    collider: false
+  });
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.208,
+    lz: 0,
+    w: 14.4,
+    h: 0.02,
+    d: 4.0,
+    bevel: 0.005,
+    segments: 2,
+    mat: pal.sandstone,
+    collider: false
+  });
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.204,
+    lz: 0,
+    w: 5.2,
+    h: 0.025,
+    d: 5.2,
+    bevel: 0.01,
+    segments: 2,
+    mat: pal.goldBronze,
+    collider: false
+  });
+
+  // 2A. Front (+Z) & Rear (-Z) Wide Ceremonial Staircases (5.2m wide) + Cheek Walls & Entrance Braziers
+  const nsSteps = [
+    { dist: 11.15, d: 0.90, h: 0.30 },
+    { dist: 10.35, d: 0.90, h: 0.60 },
+    { dist: 9.55, d: 0.90, h: 0.90 },
+    { dist: 8.35, d: 1.85, h: 1.20 }
+  ];
+  for (const dirZ of [-1, 1]) {
+    nsSteps.forEach((st, idx) => {
+      ctx.addBevelBox({
+        lx: 0,
+        ly: st.h * 0.5,
+        lz: dirZ * st.dist,
+        w: 5.2,
+        h: st.h,
+        d: st.d,
+        bevel: 0.03,
+        segments: 2,
+        mat: idx % 2 === 0 ? pal.sandstone : pal.sandstoneTrim,
+        collider: true,
+        stepable: true,
+        exactMinY: idx > 0,
+        minYPad: idx === 0 ? 0.65 : 0.45
+      });
+    });
+
+    // Flanked stepped stone cheek walls & entrance braziers
+    for (const xSide of [-1, 1]) {
+      ctx.addBevelBox({
+        lx: xSide * 2.94,
+        ly: 0.36,
+        lz: dirZ * 10.55,
+        w: 0.64,
+        h: 0.72,
+        d: 1.85,
+        bevel: 0.035,
+        mat: pal.sandstoneTrim,
+        collider: true,
+        stepable: true,
+        exactMinY: false,
+        minYPad: 0.5
+      });
+      ctx.addBevelBox({
+        lx: xSide * 2.94,
+        ly: 0.74,
+        lz: dirZ * 8.9,
+        w: 0.64,
+        h: 1.48,
+        d: 1.8,
+        bevel: 0.035,
+        mat: pal.sandstone,
+        collider: true,
+        stepable: true,
+        exactMinY: false,
+        minYPad: 0.5
+      });
+      addBrazier(xSide * 2.94, 0.72, dirZ * 11.05, false);
+    }
+  }
+
+  // 2B. East (+X) & West (-X) Wide Threshold Steps (4.6m wide)
+  const ewSteps = [
+    { dist: 10.65, w: 0.85, h: 0.30 },
+    { dist: 9.90, w: 0.85, h: 0.60 },
+    { dist: 9.15, w: 0.85, h: 0.90 },
+    { dist: 8.15, w: 1.55, h: 1.20 }
+  ];
+  for (const dirX of [-1, 1]) {
+    ewSteps.forEach((st, idx) => {
+      ctx.addBevelBox({
+        lx: dirX * st.dist,
+        ly: st.h * 0.5,
+        lz: 0,
+        w: st.w,
+        h: st.h,
+        d: 4.6,
+        bevel: 0.03,
+        segments: 2,
+        mat: idx % 2 === 0 ? pal.sandstone : pal.sandstoneTrim,
+        collider: true,
+        stepable: true,
+        exactMinY: idx > 0,
+        minYPad: idx === 0 ? 0.65 : 0.45
+      });
+    });
+  }
+
+  // 3. Perimeter Colonnade of 12 Fluted Sandstone Columns (deck y = 1.20m -> architrave y = 5.26m)
+  const colPositions = [
+    [-6.4, -6.4], [-2.7, -6.4], [2.7, -6.4], [6.4, -6.4],
+    [-6.4, -2.7], [6.4, -2.7],
+    [-6.4, 2.7], [6.4, 2.7],
+    [-6.4, 6.4], [-2.7, 6.4], [2.7, 6.4], [6.4, 6.4]
+  ];
+  const colFloorY = 1.20;
+  const colHeight = 4.06;
+  const colRadius = 0.40;
+  for (const [cx, cz] of colPositions) {
+    addDetailedColumn(ctx.root, worldMeshes, null, {
+      x: cx,
+      y: colFloorY,
+      z: cz,
+      height: colHeight,
+      radius: colRadius,
+      style: 'sandstone',
+      mat: pal.sandstone,
+      trimMat: pal.sandstoneTrim,
+      textureLib,
+      quality,
+      castShadows,
+      hasCollider: false
+    });
+    pushRotatedBoxCollider(colliders, x, baseY, z, yaw, {
+      lx: cx,
+      ly: colFloorY + colHeight * 0.5,
+      lz: cz,
+      w: colRadius * 2.5,
+      h: colHeight,
+      d: colRadius * 2.5,
+      stepable: false,
+      exactMinY: true
+    });
+  }
+
+  // 4. Layered Carved Sandstone Entablature, Perimeter Gallery Roof, Sky-Light Courtyard & Cedar Rafters
+  const entBaseY = colFloorY + colHeight; // 5.26m (plenty of clearance above 1.20m deck)
+  for (const zSign of [-1, 1]) {
+    ctx.addBevelBox({
+      lx: 0,
+      ly: entBaseY + 0.18,
+      lz: zSign * 6.4,
+      w: 14.0,
+      h: 0.36,
+      d: 1.24,
+      bevel: 0.035,
+      mat: pal.sandstoneTrim,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    ctx.addBevelBox({
+      lx: 0,
+      ly: entBaseY + 0.56,
+      lz: zSign * 6.4,
+      w: 14.45,
+      h: 0.40,
+      d: 1.46,
+      bevel: 0.04,
+      mat: pal.sandstone,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    // Gallery roof slab (leaves central 7.2m x 7.2m atrium open to the sky)
+    ctx.addBevelBox({
+      lx: 0,
+      ly: entBaseY + 0.64,
+      lz: zSign * 5.0,
+      w: 13.8,
+      h: 0.24,
+      d: 2.8,
+      bevel: 0.035,
+      mat: pal.sandstoneTrim,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    // Portal carved gold/bronze solar frieze & lotus emblem above N/S entrances
+    ctx.addBevelBox({
+      lx: 0,
+      ly: entBaseY + 0.56,
+      lz: zSign * 7.15,
+      w: 4.8,
+      h: 0.16,
+      d: 0.08,
+      bevel: 0.015,
+      segments: 2,
+      mat: pal.goldBronze,
+      collider: false
+    });
+    const sunDisc = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.46, 0.46, 0.14, 16),
+      pal.goldBronze
+    );
+    sunDisc.rotation.x = Math.PI * 0.5;
+    sunDisc.position.set(0, entBaseY + 0.56, zSign * 7.18);
+    ctx.registerMesh(sunDisc, false);
+    ctx.root.add(sunDisc);
+
+    for (const wingSign of [-1, 1]) {
+      ctx.addBevelBox({
+        lx: wingSign * 1.15,
+        ly: entBaseY + 0.56,
+        lz: zSign * 7.16,
+        w: 1.35,
+        h: 0.22,
+        d: 0.09,
+        bevel: 0.02,
+        segments: 2,
+        mat: pal.goldBronze,
+        collider: false
+      });
+    }
+  }
+
+  for (const xSign of [-1, 1]) {
+    ctx.addBevelBox({
+      lx: xSign * 6.4,
+      ly: entBaseY + 0.18,
+      lz: 0,
+      w: 1.24,
+      h: 0.36,
+      d: 11.56,
+      bevel: 0.035,
+      mat: pal.sandstoneTrim,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    ctx.addBevelBox({
+      lx: xSign * 6.4,
+      ly: entBaseY + 0.56,
+      lz: 0,
+      w: 1.46,
+      h: 0.40,
+      d: 11.52,
+      bevel: 0.04,
+      mat: pal.sandstone,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    ctx.addBevelBox({
+      lx: xSign * 5.0,
+      ly: entBaseY + 0.64,
+      lz: 0,
+      w: 2.8,
+      h: 0.24,
+      d: 7.2,
+      bevel: 0.035,
+      mat: pal.sandstoneTrim,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+    // Side portal gold/bronze relief strip
+    ctx.addBevelBox({
+      lx: xSign * 7.15,
+      ly: entBaseY + 0.56,
+      lz: 0,
+      w: 0.08,
+      h: 0.16,
+      d: 4.4,
+      bevel: 0.015,
+      segments: 2,
+      mat: pal.goldBronze,
+      collider: false
+    });
+  }
+
+  // Warm weathered cedar roof beams spanning gallery eaves & atrium rim
+  for (const bx of [-5.2, -3.5, -1.75, 1.75, 3.5, 5.2]) {
+    for (const zSign of [-1, 1]) {
+      ctx.addBevelBox({
+        lx: bx,
+        ly: entBaseY + 0.12,
+        lz: zSign * 5.25,
+        w: 0.22,
+        h: 0.22,
+        d: 3.4,
+        bevel: 0.02,
+        segments: 2,
+        mat: pal.darkWood,
+        collider: false
+      });
+    }
+  }
+  for (const bz of [-3.5, 0, 3.5]) {
+    for (const xSign of [-1, 1]) {
+      ctx.addBevelBox({
+        lx: xSign * 5.25,
+        ly: entBaseY + 0.12,
+        lz: bz,
+        w: 3.4,
+        h: 0.22,
+        d: 0.22,
+        bevel: 0.02,
+        segments: 2,
+        mat: pal.darkWood,
+        collider: false
+      });
+    }
+  }
+  // Dramatic overhead cedar beams partially bridging the central sky-light courtyard
+  for (const bz of [-2.4, 2.4]) {
+    ctx.addBevelBox({
+      lx: 0,
+      ly: entBaseY + 0.36,
+      lz: bz,
+      w: 7.8,
+      h: 0.24,
+      d: 0.28,
+      bevel: 0.02,
+      segments: 2,
+      mat: pal.darkWood,
+      collider: false
+    });
+  }
+
+  // Stepped ancient sandstone parapet blocks & corner acroteria (~6.5m crest height)
+  for (const [cx, cz] of [[-6.4, -6.4], [6.4, -6.4], [-6.4, 6.4], [6.4, 6.4]]) {
+    ctx.addBevelBox({
+      lx: cx,
+      ly: entBaseY + 0.98,
+      lz: cz,
+      w: 1.52,
+      h: 0.44,
+      d: 1.52,
+      bevel: 0.04,
+      mat: pal.sandstone,
+      collider: true,
+      stepable: true,
+      exactMinY: true
+    });
+  }
+  for (const zSign of [-1, 1]) {
+    for (const cx of [-3.6, 0, 3.6]) {
+      ctx.addBevelBox({
+        lx: cx,
+        ly: entBaseY + (cx === 0 ? 1.02 : 0.94),
+        lz: zSign * 6.4,
+        w: cx === 0 ? 3.2 : 1.35,
+        h: cx === 0 ? 0.52 : 0.36,
+        d: 1.15,
+        bevel: 0.035,
+        mat: pal.sandstoneTrim,
+        collider: true,
+        stepable: true,
+        exactMinY: true
+      });
+    }
+  }
+
+  // 5. Inner Sanctum Raised Golden Solar Altar (top at y = 1.48m for center supply pad!)
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.27,
+    lz: 0,
+    w: 3.8,
+    h: 0.14,
+    d: 3.8,
+    bevel: 0.03,
+    mat: pal.sandstone,
+    collider: true,
+    stepable: true,
+    exactMinY: true
+  });
+  ctx.addBevelBox({
+    lx: 0,
+    ly: 1.41,
+    lz: 0,
+    w: 2.6,
+    h: 0.14,
+    d: 2.6,
+    bevel: 0.028,
+    mat: pal.goldBronze,
+    collider: true,
+    stepable: true,
+    exactMinY: true
+  });
+  const altarSunRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.95, 0.045, 8, 28),
+    pal.sandstoneTrim
+  );
+  altarSunRing.rotation.x = Math.PI * 0.5;
+  altarSunRing.position.set(0, 1.485, 0);
+  ctx.registerMesh(altarSunRing, false);
+  ctx.root.add(altarSunRing);
+
+  // 4 Sanctuary Corner Bronze Ember Braziers on carved sandstone pedestals
+  for (const [bx, bz] of [[-4.2, -4.2], [4.2, -4.2], [-4.2, 4.2], [4.2, 4.2]]) {
+    addBrazier(bx, colFloorY, bz, true);
+  }
+
+  // 6. Four Corner Windblown Desert Sand Drifts banked cleanly along base corners
+  const driftGeo = new THREE.SphereGeometry(1.0, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  driftGeo.scale(2.4, 0.62, 1.85);
+  for (const [dx, dz, dyaw] of [
+    [-8.9, -8.9, 0.78],
+    [8.9, -8.9, -0.78],
+    [-8.9, 8.9, -0.78],
+    [8.9, 8.9, 0.78]
+  ]) {
+    const drift = new THREE.Mesh(driftGeo, pal.sandstone);
+    drift.position.set(dx, -0.04, dz);
+    drift.rotation.y = dyaw;
+    ctx.registerMesh(drift, false);
+    ctx.root.add(drift);
+  }
+
+  ctx.root.updateMatrixWorld(true);
+  return ctx.root;
+}
+
 

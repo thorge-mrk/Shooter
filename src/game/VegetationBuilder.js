@@ -60,10 +60,10 @@ function createGrassTuftGeometry() {
     const rx = Math.cos(angle);
     const rz = Math.sin(angle);
 
-    const w0 = 0.065;
-    const w1 = 0.042;
-    const hMid = 0.32 + (b % 2) * 0.05;
-    const hTop = 0.64 + (b % 3) * 0.07;
+    const w0 = 0.088;
+    const w1 = 0.056;
+    const hMid = 0.42 + (b % 2) * 0.06;
+    const hTop = 0.78 + (b % 3) * 0.09;
 
     const baseIdx = positions.length / 3;
     // 0: bottom left, 1: bottom right, 2: mid left, 3: mid right, 4: tip
@@ -685,14 +685,15 @@ export function populateMapNature(
   } = {}
 ) {
   const normId = mapId === 'compound' ? 'harbor' : mapId === 'cargoyard' ? 'desert' : mapId === 'nightops' ? 'snow' : mapId;
-  const aniso = quality === 'ultra' || quality === 'high' ? 8 : quality === 'balanced' ? 4 : 1;
+  const normQ = quality === 'high' ? 'ultra' : quality;
+  const aniso = normQ === 'ultra' ? 8 : normQ === 'balanced' ? 4 : 1;
 
   const geometriesToDispose = [];
   const materialsToDispose = [];
   const windMaterials = [];
 
   const registerMat = (mat, windOpts = null) => {
-    if (windOpts) {
+    if (windOpts && normQ !== 'fast') {
       applyWindSwayShader(mat, windOpts);
       windMaterials.push(mat);
     }
@@ -708,106 +709,118 @@ export function populateMapNature(
   const trunkMat = registerMat(
     createQualityMaterial(
       {
-        color: normId === 'desert' ? 0x85603f : 0x523a28,
+        color: normId === 'desert' ? 0x8a6544 : 0x5c422e,
         map: barkTex.map,
         normalMap: barkTex.normalMap,
+        normalScale: new THREE.Vector2(0.32, 0.32),
         roughnessMap: barkTex.roughnessMap,
         roughness: 0.88,
-        metalness: 0.04
+        metalness: 0.03,
+        preferCleanLowPoly: true,
+        flatShading: normQ === 'fast',
+        allowMapInFast: false
       },
-      quality
+      normQ
     )
   );
 
   const rockMat = registerMat(
     createQualityMaterial(
       {
-        color: normId === 'desert' ? 0xc89d6c : normId === 'snow' ? 0x64748b : 0x6b726a,
+        color: normId === 'desert' ? 0xd2a874 : normId === 'snow' ? 0x6c7d94 : 0x737b72,
         map: normId === 'desert' ? sandTex.map : rockTex.map,
         normalMap: normId === 'desert' ? sandTex.normalMap : rockTex.normalMap,
+        normalScale: new THREE.Vector2(0.32, 0.32),
         roughnessMap: normId === 'desert' ? sandTex.roughnessMap : rockTex.roughnessMap,
         roughness: 0.86,
-        metalness: 0.06
+        metalness: 0.04,
+        preferCleanLowPoly: true,
+        flatShading: normQ === 'fast',
+        allowMapInFast: false
       },
-      quality
+      normQ
     )
   );
 
   const capMat = registerMat(
     createQualityMaterial(
       {
-        color: normId === 'snow' ? 0xe8f1f8 : normId === 'desert' ? 0xdcbe8c : 0x4d6b3c,
+        color: normId === 'snow' ? 0xeef5fc : normId === 'desert' ? 0xe2c794 : 0x587c42,
         map: normId === 'snow' ? snowTex.map : normId === 'desert' ? sandTex.map : rockTex.map,
         normalMap: normId === 'snow' ? snowTex.normalMap : rockTex.normalMap,
+        normalScale: new THREE.Vector2(0.28, 0.28),
         roughness: 0.82,
-        metalness: 0.04
+        metalness: 0.03,
+        preferCleanLowPoly: true,
+        flatShading: normQ === 'fast',
+        allowMapInFast: false
       },
-      quality
+      normQ
     )
   );
 
   // Wind-swaying canopy, frond, grass, fern, reed, shrub, and ivy materials
-  const primaryFoliageColor = normId === 'snow' ? 0x1d4732 : normId === 'desert' ? 0x4b772e : 0x2d5a36;
-  const secondaryFoliageColor = normId === 'snow' ? 0x26583e : normId === 'desert' ? 0x628b38 : 0x3b6e42;
+  const primaryFoliageColor = normId === 'snow' ? 0x22543b : normId === 'desert' ? 0x558534 : 0x346b3e;
+  const secondaryFoliageColor = normId === 'snow' ? 0x2e6b4a : normId === 'desert' ? 0x6f9b40 : 0x45804c;
 
   const canopyMat1 = registerMat(
-    createQualityMaterial({ color: primaryFoliageColor, roughness: 0.78, metalness: 0.04 }, quality),
+    createQualityMaterial({ color: primaryFoliageColor, roughness: 0.78, metalness: 0.03, preferCleanLowPoly: true, flatShading: normQ === 'fast' }, normQ),
     { amplitude: 0.14, speed: 2.0, heightThreshold: 0.15 }
   );
   const canopyMat2 = registerMat(
-    createQualityMaterial({ color: secondaryFoliageColor, roughness: 0.76, metalness: 0.04 }, quality),
+    createQualityMaterial({ color: secondaryFoliageColor, roughness: 0.76, metalness: 0.03, preferCleanLowPoly: true, flatShading: normQ === 'fast' }, normQ),
     { amplitude: 0.16, speed: 2.25, heightThreshold: 0.15 }
   );
   const cactusMat = registerMat(
-    createQualityMaterial({ color: 0x3d6b33, roughness: 0.8, metalness: 0.04 }, quality),
+    createQualityMaterial({ color: 0x447838, roughness: 0.8, metalness: 0.03, preferCleanLowPoly: true, flatShading: normQ === 'fast' }, normQ),
     { amplitude: 0.03, speed: 1.5, heightThreshold: 0.5 }
   );
 
-  const grassColor = normId === 'snow' ? 0x5c7664 : normId === 'desert' ? 0x8c9648 : 0x497839;
-  const fernColor = normId === 'snow' ? 0x355843 : normId === 'desert' ? 0x5f7d37 : 0x386b32;
-  const reedColor = normId === 'snow' ? 0x7b8c7c : normId === 'desert' ? 0x9ca352 : 0x688744;
+  const grassColor = normId === 'snow' ? 0x64836e : normId === 'desert' ? 0x9ea44d : 0x558c42;
+  const fernColor = normId === 'snow' ? 0x3b664b : normId === 'desert' ? 0x6b8c3b : 0x3f7a38;
+  const reedColor = normId === 'snow' ? 0x839686 : normId === 'desert' ? 0xabae58 : 0x75994c;
 
   const grassMat = registerMat(
-    createQualityMaterial({ color: grassColor, roughness: 0.76, metalness: 0.02, side: THREE.DoubleSide }, quality),
+    createQualityMaterial({ color: grassColor, roughness: 0.76, metalness: 0.02, side: THREE.DoubleSide }, normQ),
     { amplitude: 0.16, speed: 2.4, heightThreshold: 0.08 }
   );
   const fernMat = registerMat(
-    createQualityMaterial({ color: fernColor, roughness: 0.74, metalness: 0.03, side: THREE.DoubleSide }, quality),
+    createQualityMaterial({ color: fernColor, roughness: 0.74, metalness: 0.02, side: THREE.DoubleSide }, normQ),
     { amplitude: 0.13, speed: 2.1, heightThreshold: 0.08 }
   );
   const reedMat = registerMat(
-    createQualityMaterial({ color: reedColor, roughness: 0.75, metalness: 0.03, side: THREE.DoubleSide }, quality),
+    createQualityMaterial({ color: reedColor, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide }, normQ),
     { amplitude: 0.19, speed: 2.2, heightThreshold: 0.12 }
   );
   const shrubMat = registerMat(
-    createQualityMaterial({ color: secondaryFoliageColor, roughness: 0.8, metalness: 0.03 }, quality),
+    createQualityMaterial({ color: secondaryFoliageColor, roughness: 0.8, metalness: 0.03, preferCleanLowPoly: true, flatShading: normQ === 'fast' }, normQ),
     { amplitude: 0.09, speed: 1.9, heightThreshold: 0.12 }
   );
   const vineLeafMat = registerMat(
-    createQualityMaterial({ color: 0x3a6b33, roughness: 0.74, metalness: 0.03 }, quality),
+    createQualityMaterial({ color: 0x417a39, roughness: 0.74, metalness: 0.02, preferCleanLowPoly: true, flatShading: normQ === 'fast' }, normQ),
     { amplitude: 0.11, speed: 2.3, heightThreshold: 0.12 }
   );
 
-  // 1. Natural Rock Arches & Cliff Boulders across the enlarged 230m-250m maps
+  // 1. Natural Rock Arches & Cliff Boulders compacted for 175m-185m maps
   const archSpecs =
     normId === 'harbor'
       ? [
-          { x: -72, z: -22, yaw: 0.35, span: 5.6, height: 4.3, depth: 2.6 },
-          { x: -64, z: 58, yaw: -2.45, span: 5.4, height: 4.2, depth: 2.5 },
-          { x: 58, z: 76, yaw: 0.65, span: 5.4, height: 4.1, depth: 2.5 }
+          { x: -60, z: -18, yaw: 0.35, span: 5.4, height: 4.2, depth: 2.5 },
+          { x: -54, z: 48, yaw: -2.45, span: 5.2, height: 4.1, depth: 2.4 },
+          { x: 48, z: 56, yaw: 0.65, span: 5.2, height: 4.0, depth: 2.4 }
         ]
       : normId === 'desert'
         ? [
-            { x: -56, z: 18, yaw: 0.42, span: 6.2, height: 4.8, depth: 2.9 },
-            { x: 56, z: -18, yaw: -2.72, span: 6.2, height: 4.8, depth: 2.9 },
-            { x: -42, z: -68, yaw: 0.85, span: 5.8, height: 4.5, depth: 2.7 },
-            { x: 42, z: 68, yaw: -2.28, span: 5.8, height: 4.5, depth: 2.7 }
+            { x: -44, z: 14, yaw: 0.42, span: 5.8, height: 4.6, depth: 2.8 },
+            { x: 44, z: -14, yaw: -2.72, span: 5.8, height: 4.6, depth: 2.8 },
+            { x: -34, z: -54, yaw: 0.85, span: 5.6, height: 4.4, depth: 2.6 },
+            { x: 34, z: 54, yaw: -2.28, span: 5.6, height: 4.4, depth: 2.6 }
           ]
         : [
-            { x: -54, z: -14, yaw: 0.25, span: 5.8, height: 4.6, depth: 2.8 },
-            { x: 54, z: 14, yaw: -2.85, span: 5.8, height: 4.6, depth: 2.8 },
-            { x: -38, z: 66, yaw: 0.72, span: 5.6, height: 4.5, depth: 2.6 },
-            { x: 38, z: -66, yaw: -2.42, span: 5.6, height: 4.5, depth: 2.6 }
+            { x: -42, z: -12, yaw: 0.25, span: 5.6, height: 4.5, depth: 2.7 },
+            { x: 42, z: 12, yaw: -2.85, span: 5.6, height: 4.5, depth: 2.7 },
+            { x: -30, z: 52, yaw: 0.72, span: 5.4, height: 4.4, depth: 2.5 },
+            { x: 30, z: -52, yaw: -2.42, span: 5.4, height: 4.4, depth: 2.5 }
           ];
 
   for (const a of archSpecs) {
@@ -824,25 +837,25 @@ export function populateMapNature(
   const boulderCoords =
     normId === 'harbor'
       ? [
-          // East & Southeast Sandy Beach Cove coastal boulders (x > 54)
-          [58, -32, 1.15], [74, -24, 1.25], [86, -8, 1.35], [64, 8, 1.05],
-          [84, 24, 1.3], [70, 42, 1.15], [88, 52, 1.28], [62, 68, 1.2],
+          // East & Southeast Sandy Beach Cove coastal boulders (x > 44)
+          [46, -24, 1.1], [58, -18, 1.15], [68, -2, 1.2], [52, 8, 1.05],
+          [66, 14, 1.2], [56, 36, 1.15], [70, 40, 1.22], [48, 50, 1.15],
           // West & South rocky headlands
-          [-64, -36, 1.25], [-78, 4, 1.35], [-68, 48, 1.2], [-36, 68, 1.18],
-          [12, 74, 1.15], [-84, -18, 1.3]
+          [-52, -28, 1.18], [-64, 4, 1.25], [-56, 38, 1.15], [-28, 54, 1.15],
+          [12, 58, 1.12], [-68, -14, 1.22]
         ]
       : normId === 'desert'
         ? [
-            [-48, -28, 1.25], [48, 28, 1.25], [-28, -56, 1.2], [28, 56, 1.2],
-            [-68, 24, 1.35], [68, -24, 1.35], [-32, 44, 1.05], [32, -44, 1.05],
-            [-82, -46, 1.4], [82, 46, 1.4], [-74, 68, 1.3], [74, -68, 1.3],
-            [-18, -84, 1.25], [18, 84, 1.25]
+            [-46, -30, 1.2], [46, 30, 1.2], [-22, -46, 1.15], [22, 46, 1.15],
+            [-54, 20, 1.25], [54, -20, 1.25], [-26, 36, 1.05], [26, -36, 1.05],
+            [-64, -38, 1.3], [64, 38, 1.3], [-58, 56, 1.25], [58, -56, 1.25],
+            [-16, -68, 1.2], [16, 68, 1.2]
           ]
         : [
-            [-46, -24, 1.25], [46, 24, 1.25], [-26, -54, 1.25], [26, 54, 1.25],
-            [-64, 28, 1.3], [64, -28, 1.3], [-42, 42, 1.1], [42, -42, 1.1],
-            [-78, -44, 1.35], [78, 44, 1.35], [-72, 68, 1.3], [72, -68, 1.3],
-            [-22, 82, 1.25], [22, -82, 1.25]
+            [-38, -22, 1.18], [38, 22, 1.18], [-22, -44, 1.18], [22, 44, 1.18],
+            [-54, 24, 1.25], [54, -24, 1.25], [-32, 34, 1.08], [32, -34, 1.08],
+            [-64, -36, 1.3], [64, 36, 1.3], [-58, 56, 1.25], [58, -56, 1.25],
+            [-18, 66, 1.2], [18, -66, 1.2]
           ];
 
   boulderCoords.forEach(([bx, bz, bScale], idx) => {
@@ -860,16 +873,16 @@ export function populateMapNature(
     });
   });
 
-  // Weathered coastal driftwood logs on the Harbor Sandy Beach Cove (x > 55)
+  // Weathered coastal driftwood logs on the Harbor Sandy Beach Cove (x = 48..60)
   if (normId === 'harbor') {
-    const driftwoodGeo = createFlutedCylinder(0.18, 0.24, 4.2, 10, 3, 7, 0.02);
+    const driftwoodGeo = createFlutedCylinder(0.18, 0.24, 4.0, 10, 3, 7, 0.02);
     geometriesToDispose.push(driftwoodGeo);
     const driftwoodSpots = [
-      [66, -14, 0.45],
-      [76, 6, -0.62],
-      [72, 30, 1.12],
-      [82, 42, -0.35],
-      [63, 52, 0.82]
+      [51, -16, 0.45],
+      [57, 4, -0.62],
+      [54, 24, 1.12],
+      [59, 34, -0.35],
+      [49, 44, 0.82]
     ];
     for (const [dx, dz, dyaw] of driftwoodSpots) {
       const dy = terrainHeightFn(dx, dz);
@@ -882,28 +895,28 @@ export function populateMapNature(
     }
   }
 
-  // 2. High-Detail Biome Trees across the enlarged 230m-250m maps
+  // 2. High-Detail Biome Trees compacted cleanly inside 175m-185m arenas
   if (normId === 'harbor') {
     const harborTrees = [
-      // Upper sandy beach dune ridge & southeast cove
-      [56, -38, 'coastalPine', 1.05],
-      [60, -8, 'coastalPine', 1.08],
-      [58, 22, 'maritimeOak', 1.0],
-      [62, 48, 'coastalPine', 1.12],
-      [52, 68, 'maritimeOak', 1.04],
+      // East sandy beach dune ridge & southeast cove
+      [43, -30, 'coastalPine', 1.05],
+      [45, -6, 'coastalPine', 1.08],
+      [44, 18, 'maritimeOak', 1.0],
+      [48, 38, 'coastalPine', 1.1],
+      [40, 54, 'maritimeOak', 1.02],
       // West & South coastal headlands
-      [-58, -28, 'coastalPine', 1.08],
-      [-66, 0, 'maritimeOak', 1.05],
-      [-58, 28, 'coastalPine', 1.1],
-      [-74, -46, 'coastalPine', 1.15],
-      [-74, 46, 'maritimeOak', 1.08],
-      [-42, 58, 'coastalPine', 1.05],
-      [-14, 64, 'maritimeOak', 1.0],
-      [18, 62, 'coastalPine', 1.06],
-      [-84, 18, 'coastalPine', 1.12],
-      [-84, -18, 'maritimeOak', 1.04],
-      [-52, 78, 'coastalPine', 1.1],
-      [28, 78, 'coastalPine', 1.08]
+      [-46, -22, 'coastalPine', 1.06],
+      [-54, 0, 'maritimeOak', 1.04],
+      [-46, 22, 'coastalPine', 1.08],
+      [-60, -34, 'coastalPine', 1.12],
+      [-60, 38, 'maritimeOak', 1.06],
+      [-34, 48, 'coastalPine', 1.04],
+      [-12, 52, 'maritimeOak', 1.0],
+      [16, 50, 'coastalPine', 1.04],
+      [-68, 14, 'coastalPine', 1.1],
+      [-68, -14, 'maritimeOak', 1.02],
+      [-44, 62, 'coastalPine', 1.08],
+      [24, 62, 'coastalPine', 1.06]
     ];
     harborTrees.forEach(([tx, tz, tType, tScale], idx) => {
       addDetailedTree(group, colliders, {
@@ -922,32 +935,32 @@ export function populateMapNature(
     });
   } else if (normId === 'desert') {
     const desertTrees = [
-      [-14, -34, 'datePalm', 1.08],
-      [14, -34, 'datePalm', 1.04],
-      [-14, 34, 'datePalm', 1.05],
-      [14, 34, 'datePalm', 1.08],
-      [-38, 32, 'desertAcacia', 1.12],
-      [38, -32, 'desertAcacia', 1.12],
-      [-52, 12, 'datePalm', 1.15],
-      [52, -12, 'datePalm', 1.15],
-      [-48, -42, 'desertAcacia', 1.06],
-      [48, 42, 'desertAcacia', 1.06],
-      [-26, -8, 'saguaro', 0.98],
-      [26, 8, 'saguaro', 0.98],
-      [-12, 22, 'saguaro', 0.92],
-      [12, -22, 'saguaro', 0.92],
-      [-56, -58, 'saguaro', 1.08],
-      [56, 58, 'saguaro', 1.08],
-      [-76, -24, 'desertAcacia', 1.14],
-      [76, 24, 'desertAcacia', 1.14],
-      [-72, 54, 'datePalm', 1.12],
-      [72, -54, 'datePalm', 1.12],
-      [-28, -76, 'datePalm', 1.1],
-      [28, 76, 'datePalm', 1.1],
-      [-86, 8, 'saguaro', 1.05],
-      [86, -8, 'saguaro', 1.05],
-      [-64, 82, 'saguaro', 1.06],
-      [64, -82, 'saguaro', 1.06]
+      [-12, -26, 'datePalm', 1.08],
+      [12, -26, 'datePalm', 1.04],
+      [-12, 26, 'datePalm', 1.05],
+      [12, 26, 'datePalm', 1.08],
+      [-28, 32, 'desertAcacia', 1.1],
+      [28, -32, 'desertAcacia', 1.1],
+      [-48, 6, 'datePalm', 1.12],
+      [48, -6, 'datePalm', 1.12],
+      [-44, -38, 'desertAcacia', 1.05],
+      [44, 38, 'desertAcacia', 1.05],
+      [-22, -10, 'saguaro', 0.96],
+      [22, 10, 'saguaro', 0.96],
+      [-14, 16, 'saguaro', 0.92],
+      [14, -16, 'saguaro', 0.92],
+      [-48, -48, 'saguaro', 1.06],
+      [48, 48, 'saguaro', 1.06],
+      [-60, -18, 'desertAcacia', 1.12],
+      [60, 18, 'desertAcacia', 1.12],
+      [-58, 44, 'datePalm', 1.1],
+      [58, -44, 'datePalm', 1.1],
+      [-22, -60, 'datePalm', 1.08],
+      [22, 60, 'datePalm', 1.08],
+      [-70, 6, 'saguaro', 1.04],
+      [70, -6, 'saguaro', 1.04],
+      [-52, 66, 'saguaro', 1.05],
+      [52, -66, 'saguaro', 1.05]
     ];
     desertTrees.forEach(([tx, tz, tType, tScale], idx) => {
       addDetailedTree(group, colliders, {
@@ -965,16 +978,16 @@ export function populateMapNature(
       });
     });
   } else {
-    // Dense snow-dusted pine forests across the 250m x 250m Alpine Glacier Peaks
+    // Dense snow-dusted pine forests across the 185m x 185m Alpine Glacier Peaks
     const snowTrees = [
-      [-24, -38, 1.08], [24, 38, 1.08], [-38, 18, 1.12], [38, -18, 1.12],
-      [-36, -12, 0.98], [36, 12, 0.98], [-16, 36, 1.04], [16, -36, 1.04],
-      [-48, -32, 1.16], [48, 32, 1.16], [-32, 48, 1.08], [32, -48, 1.08],
-      [-56, 0, 1.14], [56, 0, 1.14],
-      [-72, -52, 1.2], [72, 52, 1.2], [-72, 52, 1.18], [72, -52, 1.18],
-      [-84, -18, 1.15], [84, 18, 1.15], [-84, 24, 1.12], [84, -24, 1.12],
-      [-48, -76, 1.18], [48, 76, 1.18], [-48, 76, 1.14], [48, -76, 1.14],
-      [-18, -82, 1.1], [18, 82, 1.1], [-64, -22, 1.08], [64, 22, 1.08]
+      [-22, -32, 1.06], [22, 32, 1.06], [-32, 16, 1.1], [32, -16, 1.1],
+      [-30, -12, 0.98], [30, 12, 0.98], [-15, 32, 1.02], [15, -32, 1.02],
+      [-42, -22, 1.14], [42, 22, 1.14], [-26, 42, 1.06], [26, -42, 1.06],
+      [-48, 2, 1.12], [48, -2, 1.12],
+      [-58, -44, 1.16], [58, 44, 1.16], [-58, 44, 1.14], [58, -44, 1.14],
+      [-70, -16, 1.12], [70, 16, 1.12], [-70, 22, 1.1], [70, -22, 1.1],
+      [-40, -64, 1.14], [40, 64, 1.14], [-40, 64, 1.12], [40, -64, 1.12],
+      [-16, -68, 1.08], [16, 68, 1.08], [-56, -16, 1.06], [56, 16, 1.06]
     ];
     snowTrees.forEach(([tx, tz, tScale], idx) => {
       addDetailedTree(group, colliders, {
@@ -998,17 +1011,17 @@ export function populateMapNature(
   const vineSpots =
     normId === 'harbor'
       ? [
-          { x: -72, z: -20.5, yaw: 0.35, height: 2.9, width: 1.4 },
-          { x: -64, z: 59.5, yaw: -2.45, height: 2.9, width: 1.4 }
+          { x: -60, z: -16.6, yaw: 0.35, height: 2.9, width: 1.4 },
+          { x: -54, z: 49.4, yaw: -2.45, height: 2.9, width: 1.4 }
         ]
       : normId === 'desert'
         ? [
-            { x: -56, z: 19.4, yaw: 0.42, height: 3.1, width: 1.5 },
-            { x: 56, z: -19.4, yaw: -2.72, height: 3.1, width: 1.5 }
+            { x: -44, z: 15.4, yaw: 0.42, height: 3.1, width: 1.5 },
+            { x: 44, z: -15.4, yaw: -2.72, height: 3.1, width: 1.5 }
           ]
         : [
-            { x: -12.5, z: -2.2, yaw: Math.PI / 2, height: 2.8, width: 1.4 },
-            { x: 12.5, z: 2.2, yaw: -Math.PI / 2, height: 2.8, width: 1.4 }
+            { x: -10.5, z: -2.2, yaw: Math.PI / 2, height: 2.8, width: 1.4 },
+            { x: 10.5, z: 2.2, yaw: -Math.PI / 2, height: 2.8, width: 1.4 }
           ];
 
   for (const v of vineSpots) {
@@ -1023,34 +1036,34 @@ export function populateMapNature(
   }
 
   // 4. Dense InstancedMesh Undergrowth (Tall Grass, Ferns, Coastal/Oasis Reeds, and Low Shrubs)
-  const densityScale = quality === 'ultra' || quality === 'high' ? 1.0 : quality === 'balanced' ? 0.7 : 0.0;
+  const densityScale = normQ === 'ultra' ? 1.0 : normQ === 'balanced' ? 0.82 : 0.0;
   const rand = seededRand(normId === 'harbor' ? 701 : normId === 'desert' ? 809 : 907);
   const dummy = new THREE.Object3D();
-  const spreadSpan = normId === 'harbor' ? 204 : 224;
+  const spreadSpan = normId === 'harbor' ? 156 : 166;
 
   const isValidUndergrowthSpot = (wx, wz) => {
     const maxC = Math.max(Math.abs(wx), Math.abs(wz));
     if (maxC > spreadSpan * 0.5) return false;
     if (normId === 'harbor') {
-      // Never place grass in the deep north shipping channel or below the surf waterline
-      if (wz < -64) return false;
+      // Never place grass in the North wading channel or below the waterline
+      if (wz < -45.5) return false;
       const wy = terrainHeightFn(wx, wz);
       if (wy < -0.05) return false;
-      // Keep the paved container dockyard (-48 <= wx <= 50 && wz <= 46) clean;
-      // allow rich beach grass & reeds on the East/Southeast Sandy Beach Cove (wx > 51) and outer headlands!
-      if (wx >= -48 && wx <= 50.5 && wz >= -64 && wz <= 46) return false;
+      // Keep central dockyard clean; allow lush coastal grass & reeds on the East beach dunes & headlands
+      if (wx >= -36.5 && wx <= 36.5 && wz >= -45.5 && wz <= 34.5) return false;
       return true;
     }
-    // Avoid central spawn/supply pad plaza & primary roads
-    if (Math.hypot(wx, wz) < 10.5) return false;
-    if (Math.min(Math.abs(wx), Math.abs(wz)) < 4.2) return false;
+    // Avoid central temple/plaza & inner road lane while letting tufts frame roadsides & dunes
+    const minPlazaDist = normId === 'desert' ? 13.0 : 9.0;
+    if (Math.hypot(wx, wz) < minPlazaDist) return false;
+    if (Math.min(Math.abs(wx), Math.abs(wz)) < 2.8) return false;
     return true;
   };
 
   if (densityScale > 0) {
-    const grassCount = Math.round((normId === 'harbor' ? 340 : 440) * densityScale);
-    const fernCount = Math.round(135 * densityScale);
-    const reedCount = Math.round((normId === 'harbor' ? 140 : 95) * densityScale);
+    const grassCount = Math.round((normId === 'harbor' ? 380 : 480) * densityScale);
+    const fernCount = Math.round(145 * densityScale);
+    const reedCount = Math.round((normId === 'harbor' ? 155 : 105) * densityScale);
 
     const grassGeo = createGrassTuftGeometry();
     const fernGeo = createFernRosetteGeometry();
@@ -1064,7 +1077,7 @@ export function populateMapNature(
     const populateInstances = (instMesh, count, minScale, maxScale) => {
       let placed = 0;
       let attempts = 0;
-      while (placed < count && attempts < count * 10) {
+      while (placed < count && attempts < count * 12) {
         attempts++;
         const wx = (rand() - 0.5) * spreadSpan;
         const wz = (rand() - 0.5) * spreadSpan;
@@ -1081,17 +1094,18 @@ export function populateMapNature(
       }
       instMesh.count = placed;
       instMesh.instanceMatrix.needsUpdate = true;
+      instMesh.frustumCulled = false;
       instMesh.receiveShadow = castShadows;
       group.add(instMesh);
     };
 
-    populateInstances(grassInst, grassCount, 0.85, 1.48);
-    populateInstances(fernInst, fernCount, 0.8, 1.38);
+    populateInstances(grassInst, grassCount, 0.9, 1.55);
+    populateInstances(fernInst, fernCount, 0.85, 1.42);
     populateInstances(reedInst, reedCount, 0.92, 1.48);
   }
 
   // Low Shrubs / Bushes
-  const shrubCount = quality === 'fast' ? 24 : Math.round(72 * (quality === 'ultra' ? 1.0 : 0.75));
+  const shrubCount = normQ === 'fast' ? 28 : Math.round(78 * (normQ === 'ultra' ? 1.0 : 0.82));
   const shrubGeo = createSculptedRockGeometry(0.58, 1, 77, 0.68);
   shrubGeo.translate(0, 0.38, 0);
   geometriesToDispose.push(shrubGeo);
@@ -1115,6 +1129,7 @@ export function populateMapNature(
   }
   shrubInst.count = shrubsPlaced;
   shrubInst.instanceMatrix.needsUpdate = true;
+  shrubInst.frustumCulled = false;
   shrubInst.castShadow = castShadows;
   shrubInst.receiveShadow = castShadows;
   group.add(shrubInst);

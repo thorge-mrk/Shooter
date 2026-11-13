@@ -277,7 +277,7 @@ export class NetworkManager {
       }
     };
     probe();
-    this.pingTimer = setInterval(probe, 2500);
+    this.pingTimer = setInterval(probe, 1000);
   }
 
   _stopPingLoop() {

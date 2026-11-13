@@ -84,9 +84,18 @@ test('resolveEffectiveInputMode handles desktop, iPad keyboard+touch, and preven
   );
 });
 
-test('getTerrainHeight produces flat harbor dock and undulating hills on desert and snow', () => {
+test('getTerrainHeight produces flat harbor dock, wadeable water channel, and desert/snow hills', () => {
   assert.equal(getTerrainHeight('harbor', 20, 20), 0);
-  const desertHeights = [getTerrainHeight('desert', 20, -18), getTerrainHeight('desert', -25, 22)];
+  // North Harbor channel must remain wadeable so camera eye level (+1.7m) stays well above water (-0.25m)
+  const northChannelY = getTerrainHeight('harbor', 0, -56);
+  assert.ok(northChannelY <= -0.7 && northChannelY >= -1.05, `unexpected channel depth: ${northChannelY}`);
+  // East sandy beach shoreline transitions smoothly below water
+  assert.ok(getTerrainHeight('harbor', 44, 0) > 0.3);
+  assert.ok(getTerrainHeight('harbor', 72, 0) < -0.5);
+  // Desert center plateau under the temple rests cleanly near y = 0
+  assert.ok(Math.abs(getTerrainHeight('desert', 0, 0)) < 0.05);
+
+  const desertHeights = [getTerrainHeight('desert', 24, -22), getTerrainHeight('desert', -25, 22)];
   const snowHeights = [getTerrainHeight('snow', 20, 20), getTerrainHeight('snow', -22, -24)];
   assert.ok(desertHeights.some((h) => h > 0.5));
   assert.ok(snowHeights.some((h) => h > 0.5));

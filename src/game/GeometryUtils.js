@@ -8,22 +8,43 @@ const _n = new THREE.Vector3();
  * so no object in the game looks like a sharp-edged placeholder cube.
  */
 export function createBeveledBox(width = 1, height = 1, depth = 1, bevel = 0.04, segments = 3) {
-  const segs = Math.max(2, segments);
+  const segs = Math.max(3, segments);
   const geo = new THREE.BoxGeometry(width, height, depth, segs, segs, segs);
   const r = Math.min(bevel, width * 0.35, height * 0.35, depth * 0.35);
   if (r <= 0.0001) return geo;
 
-  const hx = Math.max(0.0001, width * 0.5 - r);
-  const hy = Math.max(0.0001, height * 0.5 - r);
-  const hz = Math.max(0.0001, depth * 0.5 - r);
+  const halfX = width * 0.5;
+  const halfY = height * 0.5;
+  const halfZ = depth * 0.5;
+
+  const hx = Math.max(0.0001, halfX - r);
+  const hy = Math.max(0.0001, halfY - r);
+  const hz = Math.max(0.0001, halfZ - r);
+
+  const outerFactor = 1 - 2 / segs;
+  const outerX = halfX * outerFactor;
+  const outerY = halfY * outerFactor;
+  const outerZ = halfZ * outerFactor;
+  const scaleX = outerX > 1e-6 ? hx / outerX : 1;
+  const scaleY = outerY > 1e-6 ? hy / outerY : 1;
+  const scaleZ = outerZ > 1e-6 ? hz / outerZ : 1;
 
   const pos = geo.attributes.position;
   const norm = geo.attributes.normal;
+  const uv = geo.attributes.uv;
 
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    const origNx = norm.getX(i);
+    const origNy = norm.getY(i);
+    const origNz = norm.getZ(i);
+
+    if (halfX > 1e-4 && Math.abs(x) < halfX - 1e-4) x *= scaleX;
+    if (halfY > 1e-4 && Math.abs(y) < halfY - 1e-4) y *= scaleY;
+    if (halfZ > 1e-4 && Math.abs(z) < halfZ - 1e-4) z *= scaleZ;
 
     const cx = Math.max(-hx, Math.min(hx, x));
     const cy = Math.max(-hy, Math.min(hy, y));
@@ -31,15 +52,49 @@ export function createBeveledBox(width = 1, height = 1, depth = 1, bevel = 0.04,
 
     _v.set(x - cx, y - cy, z - cz);
     const len = _v.length();
+    let fx = x;
+    let fy = y;
+    let fz = z;
     if (len > 1e-5) {
-      _n.copy(_v). divideScalar(len);
-      pos.setXYZ(i, cx + _n.x * r, cy + _n.y * r, cz + _n.z * r);
+      _n.copy(_v).divideScalar(len);
+      fx = cx + _n.x * r;
+      fy = cy + _n.y * r;
+      fz = cz + _n.z * r;
+      pos.setXYZ(i, fx, fy, fz);
       norm.setXYZ(i, _n.x, _n.y, _n.z);
+    } else {
+      pos.setXYZ(i, fx, fy, fz);
+    }
+
+    if (uv) {
+      let u = 0.5;
+      let v = 0.5;
+      if (origNx > 0.5) {
+        u = 0.5 - fz / (depth || 1);
+        v = 0.5 + fy / (height || 1);
+      } else if (origNx < -0.5) {
+        u = 0.5 + fz / (depth || 1);
+        v = 0.5 + fy / (height || 1);
+      } else if (origNy > 0.5) {
+        u = 0.5 + fx / (width || 1);
+        v = 0.5 - fz / (depth || 1);
+      } else if (origNy < -0.5) {
+        u = 0.5 + fx / (width || 1);
+        v = 0.5 + fz / (depth || 1);
+      } else if (origNz > 0.5) {
+        u = 0.5 + fx / (width || 1);
+        v = 0.5 + fy / (height || 1);
+      } else {
+        u = 0.5 - fx / (width || 1);
+        v = 0.5 + fy / (height || 1);
+      }
+      uv.setXY(i, Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v)));
     }
   }
 
   pos.needsUpdate = true;
   norm.needsUpdate = true;
+  if (uv) uv.needsUpdate = true;
   return geo;
 }
 

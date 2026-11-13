@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createBeveledBox, createFlutedCylinder } from './GeometryUtils.js';
-import { SKIN_CATALOG, createQualityMaterial } from './Textures.js';
+import { SKIN_CATALOG, resolveSkinCatalogEntry, createQualityMaterial } from './Textures.js';
 
 export const OPERATOR_CATALOG = [
   {
@@ -95,7 +95,9 @@ export const ENEMY_CLASS_CATALOG = [
     burstSize: 3,
     burstIntervalMs: 190,
     damage: 10,
-    color: 0x0f766e,
+    clothColor: 0x2b3440,
+    color: 0x14867c,
+    rigColor: 0x1a2029,
     accent: 0x2dd4bf,
     scale: 0.96,
     role: 'flanker',
@@ -112,7 +114,9 @@ export const ENEMY_CLASS_CATALOG = [
     burstSize: 3,
     burstIntervalMs: 250,
     damage: 12,
-    color: 0x991b1b,
+    clothColor: 0x333a47,
+    color: 0xb92b27,
+    rigColor: 0x1b2028,
     accent: 0xf87171,
     scale: 1.0,
     role: 'assault',
@@ -129,7 +133,9 @@ export const ENEMY_CLASS_CATALOG = [
     burstSize: 2,
     burstIntervalMs: 310,
     damage: 15,
-    color: 0x92400e,
+    clothColor: 0x3b352f,
+    color: 0xc26512,
+    rigColor: 0x201d1a,
     accent: 0xfbbf24,
     scale: 1.04,
     role: 'rusher',
@@ -146,8 +152,10 @@ export const ENEMY_CLASS_CATALOG = [
     burstSize: 1,
     burstIntervalMs: 650,
     damage: 22,
-    color: 0x3f6212,
-    accent: 0xa3e635,
+    clothColor: 0x353f31,
+    color: 0x5b7f1e,
+    rigColor: 0x1f251d,
+    accent: 0xbef264,
     scale: 0.98,
     role: 'sniper',
     Role: 'sniper',
@@ -163,8 +171,10 @@ export const ENEMY_CLASS_CATALOG = [
     burstSize: 5,
     burstIntervalMs: 165,
     damage: 14,
-    color: 0x312e81,
-    accent: 0x818cf8,
+    clothColor: 0x2f3646,
+    color: 0x46529e,
+    rigColor: 0x1b1f29,
+    accent: 0x93c5fd,
     scale: 1.08,
     role: 'heavy',
     Role: 'heavy',
@@ -227,8 +237,9 @@ function resolveSoldierAppearance(colorOrConfig, extraOptions = null) {
     ? ENEMY_CLASS_CATALOG.find((e) => e.id === cfg.enemyClass) || ENEMY_CLASS_CATALOG[1]
     : null;
 
-  const skinId = cfg.skinId || (opSpec ? opSpec.defaultSkin : null);
-  const skinSpec = skinId ? SKIN_CATALOG.find((s) => s.id === skinId) : null;
+  const rawSkinId = cfg.skinId || (opSpec ? opSpec.defaultSkin : null);
+  const skinSpec = rawSkinId ? resolveSkinCatalogEntry(rawSkinId) : null;
+  const skinId = skinSpec ? skinSpec.id : rawSkinId;
 
   const primaryColor =
     (enemySpec ? enemySpec.color : null) ??
@@ -242,13 +253,19 @@ function resolveSoldierAppearance(colorOrConfig, extraOptions = null) {
     (opSpec ? opSpec.accentColor : null) ??
     (skinSpec ? new THREE.Color(skinSpec.accent).getHex() : 0x38bdf8);
 
-  const clothColor = skinSpec
-    ? new THREE.Color(skinSpec.cloth).getHex()
-    : new THREE.Color(primaryColor).multiplyScalar(0.82).getHex();
+  const clothColor =
+    enemySpec && enemySpec.clothColor !== undefined
+      ? enemySpec.clothColor
+      : skinSpec
+        ? new THREE.Color(skinSpec.cloth).getHex()
+        : new THREE.Color(primaryColor).multiplyScalar(0.82).getHex();
 
-  const rigColor = skinSpec
-    ? new THREE.Color(skinSpec.secondary).getHex()
-    : 0x1b222c;
+  const rigColor =
+    enemySpec && enemySpec.rigColor !== undefined
+      ? enemySpec.rigColor
+      : skinSpec
+        ? new THREE.Color(skinSpec.secondary).getHex()
+        : 0x1b222c;
 
   const headgear = (opSpec && opSpec.headgear) || (enemySpec && enemySpec.headgear) || 'nvg';
   const rig = (opSpec && opSpec.rig) || (enemySpec && enemySpec.rig) || 'heavy';
@@ -280,19 +297,26 @@ function resolveSoldierAppearance(colorOrConfig, extraOptions = null) {
  */
 export function applySoldierSkin(model, skinId, textureLib = null, quality = 'balanced') {
   if (!model || !model.materialMap) return;
-  const skinSpec = SKIN_CATALOG.find((s) => s.id === skinId) || SKIN_CATALOG[0];
+  const skinSpec = resolveSkinCatalogEntry(skinId);
   const skinTex =
     textureLib && typeof textureLib.getSkinTextureSet === 'function'
       ? textureLib.getSkinTextureSet(skinSpec.id)
       : null;
+  const isTextileSkin =
+    skinSpec.id === 'desert_camo' ||
+    skinSpec.id === 'woodland' ||
+    skinSpec.id === 'arctic_camo';
 
-  const { bduMat, armorMat, rigMat, accentMat, visorMat } = model.materialMap;
+  const { bduMat, armorMat, rigMat, accentMat, iffMat, visorMat } = model.materialMap;
   if (bduMat) {
-    bduMat.color.set(skinTex ? 0xdbe3ee : skinSpec.cloth);
-    if ('map' in bduMat) bduMat.map = skinTex ? skinTex.map : null;
-    if ('normalMap' in bduMat && quality !== 'fast') bduMat.normalMap = skinTex ? skinTex.normalMap : null;
-    if ('roughnessMap' in bduMat && quality !== 'fast') bduMat.roughnessMap = skinTex ? skinTex.roughnessMap : null;
-    if ('roughness' in bduMat) bduMat.roughness = Math.min(0.88, skinSpec.roughness + 0.16);
+    bduMat.color.set(skinTex && isTextileSkin ? 0xdbe3ee : skinSpec.cloth);
+    if ('map' in bduMat) bduMat.map = skinTex && isTextileSkin ? skinTex.map : null;
+    if ('normalMap' in bduMat && quality !== 'fast') bduMat.normalMap = skinTex && isTextileSkin ? skinTex.normalMap : null;
+    if ('roughnessMap' in bduMat) bduMat.roughnessMap = null;
+    if (bduMat.normalScale) bduMat.normalScale.set(0.32, 0.32);
+    if ('roughness' in bduMat) bduMat.roughness = 0.88;
+    if ('metalness' in bduMat) bduMat.metalness = 0.02;
+    if ('clearcoat' in bduMat) bduMat.clearcoat = 0.0;
     bduMat.needsUpdate = true;
   }
 
@@ -301,20 +325,35 @@ export function applySoldierSkin(model, skinId, textureLib = null, quality = 'ba
     if ('map' in armorMat) armorMat.map = skinTex ? skinTex.map : null;
     if ('normalMap' in armorMat && quality !== 'fast') armorMat.normalMap = skinTex ? skinTex.normalMap : null;
     if ('roughnessMap' in armorMat && quality !== 'fast') armorMat.roughnessMap = skinTex ? skinTex.roughnessMap : null;
-    if ('roughness' in armorMat) armorMat.roughness = skinSpec.roughness;
-    if ('metalness' in armorMat) armorMat.metalness = skinSpec.metalness;
+    if (armorMat.normalScale) armorMat.normalScale.set(0.32, 0.32);
+    if ('roughness' in armorMat) {
+      armorMat.roughness = skinTex && skinTex.roughnessMap
+        ? Math.min(0.95, Math.max(0.56, skinSpec.roughness + 0.32))
+        : 0.56;
+    }
+    if ('metalness' in armorMat) armorMat.metalness = Math.min(0.38, Math.max(0.18, skinSpec.metalness * 0.65));
+    if ('clearcoat' in armorMat) armorMat.clearcoat = Math.min(0.18, (skinSpec.clearcoat || 0.08) * 0.6);
     armorMat.needsUpdate = true;
   }
 
   if (rigMat) {
     rigMat.color.set(skinSpec.secondary);
+    if ('roughness' in rigMat) rigMat.roughness = 0.84;
+    if ('metalness' in rigMat) rigMat.metalness = 0.06;
+    if ('clearcoat' in rigMat) rigMat.clearcoat = 0.0;
     rigMat.needsUpdate = true;
   }
 
   if (accentMat && !model.enemySpec) {
     accentMat.color.set(skinSpec.accent);
-    if ('emissive' in accentMat) accentMat.emissive.set(skinSpec.accent);
+    if ('emissiveIntensity' in accentMat) accentMat.emissiveIntensity = 0.0;
     accentMat.needsUpdate = true;
+  }
+
+  if (iffMat && !model.enemySpec) {
+    iffMat.color.set(skinSpec.accent);
+    if ('emissive' in iffMat) iffMat.emissive.set(skinSpec.accent);
+    iffMat.needsUpdate = true;
   }
 
   if (visorMat && !model.enemySpec && 'emissive' in visorMat) {
@@ -360,54 +399,87 @@ export function buildSoldierMesh(
     rig
   } = app;
 
+  const resolvedSkinId = skinSpec ? skinSpec.id : skinId;
   const skinTex =
-    textureLib && skinId && typeof textureLib.getSkinTextureSet === 'function'
-      ? textureLib.getSkinTextureSet(skinId)
+    textureLib && resolvedSkinId && typeof textureLib.getSkinTextureSet === 'function'
+      ? textureLib.getSkinTextureSet(resolvedSkinId)
       : null;
   const hasSkinMap = Boolean(skinTex && skinTex.map && !app.enemySpec);
+  const isTextileSkin =
+    resolvedSkinId === 'desert_camo' ||
+    resolvedSkinId === 'woodland' ||
+    resolvedSkinId === 'arctic_camo';
 
+  // Woven tactical BDU fabric: strictly matte (roughness 0.88, metalness 0.02, zero clearcoat)
   const bduMat = createQualityMaterial(
     {
-      color: hasSkinMap ? 0xdbe3ee : clothColor,
-      map: hasSkinMap ? skinTex.map : null,
-      normalMap: skinTex ? skinTex.normalMap : null,
-      roughnessMap: skinTex ? skinTex.roughnessMap : null,
-      roughness: skinSpec ? Math.min(0.88, skinSpec.roughness + 0.16) : 0.72,
-      metalness: skinSpec ? Math.max(0.08, skinSpec.metalness * 0.35) : 0.12
+      color: hasSkinMap && isTextileSkin ? 0xdbe3ee : clothColor,
+      map: hasSkinMap && isTextileSkin ? skinTex.map : null,
+      normalMap: !app.enemySpec && isTextileSkin && skinTex ? skinTex.normalMap : null,
+      normalScale: new THREE.Vector2(0.32, 0.32),
+      roughnessMap: null,
+      roughness: 0.88,
+      metalness: 0.02,
+      clearcoat: 0.0
     },
     quality
   );
 
+  // Matte anodized ballistic ceramic / Kevlar armor plating (calm 0.32 normalScale, no plastic glare)
   const armorMat = createQualityMaterial(
     {
       color: hasSkinMap ? 0xffffff : primaryColor,
       map: hasSkinMap ? skinTex.map : null,
-      normalMap: skinTex ? skinTex.normalMap : null,
-      roughnessMap: skinTex ? skinTex.roughnessMap : null,
-      roughness: skinSpec ? skinSpec.roughness : 0.38,
-      metalness: skinSpec ? skinSpec.metalness : 0.46,
-      clearcoat: skinSpec ? skinSpec.clearcoat : 0.22
+      normalMap: !app.enemySpec && skinTex ? skinTex.normalMap : null,
+      normalScale: new THREE.Vector2(0.32, 0.32),
+      roughnessMap: !app.enemySpec && skinTex ? skinTex.roughnessMap : null,
+      roughness:
+        !app.enemySpec && skinTex && skinTex.roughnessMap
+          ? Math.min(0.95, Math.max(0.56, (skinSpec?.roughness ?? 0.56) + 0.32))
+          : 0.56,
+      metalness:
+        !app.enemySpec && skinSpec
+          ? Math.min(0.38, Math.max(0.18, skinSpec.metalness * 0.65))
+          : 0.24,
+      clearcoat:
+        !app.enemySpec && skinSpec
+          ? Math.min(0.18, (skinSpec.clearcoat || 0.08) * 0.6)
+          : 0.08
     },
     quality
   );
 
+  // Heavy ballistic Cordura nylon webbing, pouches, belt & holsters
   const rigMat = createQualityMaterial(
     {
       color: rigColor,
-      roughness: 0.56,
-      metalness: 0.28
+      roughness: 0.84,
+      metalness: 0.06,
+      clearcoat: 0.0
     },
     quality
   );
 
+  // Matte anodized trim hardware (buckles, knee caps, valves — non-emissive)
   const accentMat = createQualityMaterial(
     {
       color: accentColor,
+      roughness: 0.48,
+      metalness: 0.34,
+      clearcoat: 0.12
+    },
+    quality
+  );
+
+  // Crisp small tactical IFF chevrons, shoulder patches, helmet visors & optic lenses ONLY
+  const iffMat = createQualityMaterial(
+    {
+      color: accentColor,
       emissive: accentColor,
-      emissiveIntensity: 0.44,
-      roughness: 0.25,
-      metalness: 0.68,
-      clearcoat: 0.48
+      emissiveIntensity: 0.38,
+      roughness: 0.32,
+      metalness: 0.38,
+      clearcoat: 0.16
     },
     quality
   );
@@ -415,8 +487,9 @@ export function buildSoldierMesh(
   const bootMat = createQualityMaterial(
     {
       color: 0x14181f,
-      roughness: 0.82,
-      metalness: 0.15
+      roughness: 0.84,
+      metalness: 0.08,
+      clearcoat: 0.0
     },
     quality
   );
@@ -424,8 +497,9 @@ export function buildSoldierMesh(
   const skinMat = createQualityMaterial(
     {
       color: 0xd4a587,
-      roughness: 0.72,
-      metalness: 0.04
+      roughness: 0.74,
+      metalness: 0.02,
+      clearcoat: 0.0
     },
     quality
   );
@@ -434,10 +508,10 @@ export function buildSoldierMesh(
     {
       color: 0x0b1322,
       emissive: accentColor,
-      emissiveIntensity: 0.16,
-      roughness: 0.14,
-      metalness: 0.9,
-      clearcoat: 0.85
+      emissiveIntensity: app.enemySpec ? 0.38 : 0.22,
+      roughness: 0.16,
+      metalness: 0.85,
+      clearcoat: 0.62
     },
     quality
   );
@@ -445,9 +519,9 @@ export function buildSoldierMesh(
   const gunMat = createQualityMaterial(
     {
       color: 0x181d24,
-      roughness: 0.34,
-      metalness: 0.78,
-      clearcoat: 0.25
+      roughness: 0.42,
+      metalness: 0.72,
+      clearcoat: 0.14
     },
     quality
   );
@@ -510,10 +584,11 @@ export function buildSoldierMesh(
     quadSweep.scale.set(1.05, 1.0, 0.78);
     quadSweep.position.set(0, -0.19, -0.032);
 
-    // Outer beveled ballistic thigh plate
+    // Outer beveled ballistic thigh plate contoured smoothly along leg angle
     const thighPlate = styleDeco(
-      new THREE.Mesh(createBeveledBox(0.052, 0.21, 0.148, 0.016, 2), armorMat)
+      new THREE.Mesh(createBeveledBox(0.048, 0.205, 0.142, 0.016, 2), armorMat)
     );
+    thighPlate.rotation.z = isRight ? -0.05 : 0.05;
     thighPlate.position.set(isRight ? 0.088 : -0.088, -0.195, 0);
 
     hip.add(hipJoint, upperThigh, quadSweep, thighPlate);
@@ -826,7 +901,7 @@ export function buildSoldierMesh(
   adminPouch.position.set(0, 0.355, -0.182);
 
   const iffStrip = styleDeco(
-    new THREE.Mesh(createBeveledBox(0.068, 0.022, 0.016, 0.005, 2), accentMat)
+    new THREE.Mesh(createBeveledBox(0.072, 0.024, 0.016, 0.005, 2), iffMat)
   );
   iffStrip.position.set(0, 0.355, -0.202);
 
@@ -907,9 +982,9 @@ export function buildSoldierMesh(
       );
       exoPod.position.set(side, 0.30, 0.265);
       const podVent = styleDeco(
-        new THREE.Mesh(createBeveledBox(0.042, 0.17, 0.028, 0.008, 2), accentMat)
+        new THREE.Mesh(createBeveledBox(0.028, 0.14, 0.020, 0.006, 2), iffMat)
       );
-      podVent.position.set(side, 0.30, 0.325);
+      podVent.position.set(side, 0.30, 0.324);
       torsoPivot.add(exoPod, podVent);
     }
     torsoPivot.add(spine);
@@ -995,11 +1070,16 @@ export function buildSoldierMesh(
   helmet.position.set(0, 0.096, 0.006);
   helmet.rotation.x = -0.12;
 
-  // Rear helmet battery pack counterweight & velcro IFF patch
+  // Rear helmet battery pack counterweight & crisp rear helmet IFF strobe strip
   const helmetBattery = styleDeco(
     new THREE.Mesh(createBeveledBox(0.082, 0.058, 0.042, 0.010, 2), rigMat)
   );
   helmetBattery.position.set(0, 0.095, 0.162);
+
+  const helmetIff = styleDeco(
+    new THREE.Mesh(createBeveledBox(0.052, 0.016, 0.012, 0.004, 2), iffMat)
+  );
+  helmetIff.position.set(0, 0.102, 0.184);
 
   // Wrap-around ballistic visor
   const visor = tagPart(
@@ -1050,7 +1130,7 @@ export function buildSoldierMesh(
   micBoom.position.set(-0.112, 0.032, -0.068);
 
   const micTip = styleDeco(
-    new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), accentMat)
+    new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), bootMat)
   );
   micTip.scale.set(1.0, 0.85, 1.4);
   micTip.position.set(-0.078, 0.018, -0.128);
@@ -1072,7 +1152,7 @@ export function buildSoldierMesh(
       tube.position.set(tx, 0.122, -0.182);
 
       const lens = styleDeco(
-        new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.01, 8), accentMat)
+        new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.01, 8), iffMat)
       );
       lens.rotation.x = Math.PI / 2;
       lens.position.set(tx, 0.122, -0.224);
@@ -1090,7 +1170,7 @@ export function buildSoldierMesh(
     hood.position.set(0, 0.086, 0.016);
 
     const opticBar = styleDeco(
-      new THREE.Mesh(createBeveledBox(0.205, 0.030, 0.044, 0.008, 2), accentMat)
+      new THREE.Mesh(createBeveledBox(0.185, 0.024, 0.040, 0.008, 2), iffMat)
     );
     opticBar.position.set(0, 0.082, -0.148);
     headGroup.add(hood, opticBar);
@@ -1107,11 +1187,42 @@ export function buildSoldierMesh(
     brim.position.set(0, 0.152, -0.112);
     headGroup.add(wrap, brim);
   } else if (headgear === 'arctic_visor') {
-    const snowGoggles = styleDeco(
-      new THREE.Mesh(createBeveledBox(0.24, 0.084, 0.088, 0.024, 2), accentMat)
+    const goggleFrame = styleDeco(
+      new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          0.154,
+          0.154,
+          0.086,
+          16,
+          1,
+          false,
+          -Math.PI * 0.44,
+          Math.PI * 0.88
+        ),
+        rigMat
+      )
     );
-    snowGoggles.position.set(0, 0.082, -0.122);
-    headGroup.add(snowGoggles);
+    goggleFrame.position.set(0, 0.084, -0.016);
+    goggleFrame.rotation.y = Math.PI;
+
+    const snowGoggles = styleDeco(
+      new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          0.158,
+          0.158,
+          0.062,
+          16,
+          1,
+          false,
+          -Math.PI * 0.40,
+          Math.PI * 0.80
+        ),
+        visorMat
+      )
+    );
+    snowGoggles.position.set(0, 0.084, -0.018);
+    snowGoggles.rotation.y = Math.PI;
+    headGroup.add(goggleFrame, snowGoggles);
   } else if (headgear === 'rebreather') {
     for (const side of [-1, 1]) {
       const filterCan = styleDeco(
@@ -1129,15 +1240,28 @@ export function buildSoldierMesh(
     }
   } else if (headgear === 'blast_helmet') {
     const blastShield = tagPart(
-      new THREE.Mesh(createBeveledBox(0.248, 0.195, 0.155, 0.034, 3), armorMat),
+      new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          0.168,
+          0.174,
+          0.165,
+          16,
+          1,
+          false,
+          -Math.PI * 0.54,
+          Math.PI * 1.08
+        ),
+        armorMat
+      ),
       'head'
     );
-    blastShield.position.set(0, 0.074, -0.072);
+    blastShield.position.set(0, 0.072, -0.012);
+    blastShield.rotation.y = Math.PI;
 
     const eyeSlit = styleDeco(
-      new THREE.Mesh(createBeveledBox(0.195, 0.026, 0.034, 0.006, 2), accentMat)
+      new THREE.Mesh(createBeveledBox(0.175, 0.022, 0.030, 0.006, 2), iffMat)
     );
-    eyeSlit.position.set(0, 0.092, -0.152);
+    eyeSlit.position.set(0, 0.090, -0.158);
     headGroup.add(blastShield, eyeSlit);
   }
 
@@ -1149,6 +1273,7 @@ export function buildSoldierMesh(
     chinGuard,
     helmet,
     helmetBattery,
+    helmetIff,
     visor
   );
 
@@ -1156,8 +1281,8 @@ export function buildSoldierMesh(
   // 5. ARTICULATED 2-SEGMENT ARMS & TACTICAL CARBINE (Attached to torsoPivot)
   // ============================================================================
   const isHeavyPauldron = rig === 'heavy' || rig === 'exosuit';
-  const pauldronW = isHeavyPauldron ? 0.136 : 0.112;
-  const pauldronH = isHeavyPauldron ? 0.155 : 0.125;
+  const pauldronW = isHeavyPauldron ? 0.132 : 0.108;
+  const pauldronH = isHeavyPauldron ? 0.148 : 0.120;
 
   const makeArm = (isRight) => {
     const side = isRight ? 1 : -1;
@@ -1172,16 +1297,18 @@ export function buildSoldierMesh(
     deltoidCap.scale.set(1.02, 1.12, 0.98);
     deltoidCap.position.set(0, -0.015, 0);
 
-    // Contoured shoulder pauldron armor + unit Velcro patch panel
+    // Contoured shoulder pauldron armor angled cleanly down the deltoid + IFF shoulder chevron patch
     const pauldron = styleDeco(
-      new THREE.Mesh(createBeveledBox(pauldronW, pauldronH, 0.136, 0.028, 2), armorMat)
+      new THREE.Mesh(createBeveledBox(pauldronW, pauldronH, 0.132, 0.028, 2), armorMat)
     );
-    pauldron.position.set(side * 0.026, -0.025, 0);
+    pauldron.rotation.z = -side * 0.16;
+    pauldron.position.set(side * 0.024, -0.025, 0);
 
     const patchPanel = styleDeco(
-      new THREE.Mesh(createBeveledBox(0.018, 0.062, 0.074, 0.005, 2), accentMat)
+      new THREE.Mesh(createBeveledBox(0.016, 0.056, 0.070, 0.005, 2), iffMat)
     );
-    patchPanel.position.set(side * (0.026 + pauldronW * 0.5), -0.025, 0);
+    patchPanel.rotation.z = -side * 0.16;
+    patchPanel.position.set(side * (0.024 + pauldronW * 0.5), -0.028, 0);
 
     // Upper arm biceps/triceps segment (y = 0 to -0.26m from shoulder)
     const upperArmMesh = tagPart(
@@ -1219,7 +1346,7 @@ export function buildSoldierMesh(
 
     if (!isRight) {
       const gpsScreen = styleDeco(
-        new THREE.Mesh(createBeveledBox(0.036, 0.045, 0.016, 0.004, 2), accentMat)
+        new THREE.Mesh(createBeveledBox(0.036, 0.045, 0.016, 0.004, 2), iffMat)
       );
       gpsScreen.position.set(0.032, -0.185, -0.018);
       elbowPivot.add(gpsScreen);
@@ -1331,7 +1458,7 @@ export function buildSoldierMesh(
   opticHousing.position.set(0, 0.072, -0.35);
 
   const opticLens = styleDeco(
-    new THREE.Mesh(createBeveledBox(0.030, 0.030, 0.012, 0.003, 2), accentMat)
+    new THREE.Mesh(createBeveledBox(0.030, 0.030, 0.012, 0.003, 2), iffMat)
   );
   opticLens.position.set(0, 0.074, -0.31);
 
@@ -1438,6 +1565,7 @@ export function buildSoldierMesh(
       armorMat,
       rigMat,
       accentMat,
+      iffMat,
       bootMat,
       skinMat,
       visorMat,
@@ -1448,6 +1576,7 @@ export function buildSoldierMesh(
       armorMat,
       rigMat,
       accentMat,
+      iffMat,
       bootMat,
       skinMat,
       visorMat,

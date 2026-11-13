@@ -9,6 +9,20 @@ import { RemotePlayerManager } from './RemotePlayers.js';
 import { BotManager } from './BotAI.js';
 import { PlayerController } from './PlayerController.js';
 
+export function detectGraphicsCapability() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { isTouchDevice: false, canRun4K: true };
+  }
+  const hasCoarsePointer = Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const touchPoints = Number(navigator.maxTouchPoints || 0);
+  const isIPadUA = /iPad|Macintosh.*Mobile/i.test(navigator.userAgent || '');
+  const isTouchDevice = hasCoarsePointer || touchPoints > 0 || isIPadUA;
+  return {
+    isTouchDevice,
+    canRun4K: !isTouchDevice
+  };
+}
+
 export class GameEngine {
   constructor({ container, soundEngine, network, ui }) {
     this.container = container;
@@ -26,20 +40,23 @@ export class GameEngine {
       preserveDrawingBuffer: true
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.06;
+    this.renderer.toneMappingExposure = 1.08;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Performance & Graphics Quality ('ultra' | 'balanced' | 'fast')
+    // Performance & Graphics Quality ('ultra' [4K PC] | 'balanced' [HD Clean] | 'fast' [720p Low Poly])
+    this.capability = detectGraphicsCapability();
     this.quality = 'balanced';
     this.autoFps = true;
     this.fps = 60;
+    this.frameMs = 16.6;
     this.frameCount = 0;
     this.fpsAccum = 0;
     this.currentPixelRatio = 1.25;
     this.lowFpsStreak = 0;
     this.elapsedSec = 0;
+    this._switchingQuality = false;
 
     // Loadout Customization
     this.operatorId = 'vanguard';
@@ -169,50 +186,73 @@ export class GameEngine {
     };
   }
 
-  setQuality(quality, autoFps = this.autoFps) {
-    const normalized = quality === 'high' ? 'ultra' : (quality || 'balanced');
+  setQuality(quality, autoFps = this.autoFps, forceAllowUltra = false) {
+    let normalized = quality === 'high' ? 'ultra' : (quality || 'balanced');
+    if (normalized === 'ultra' && !this.capability.canRun4K && !forceAllowUltra) {
+      normalized = 'balanced';
+    }
     const changed = this.quality !== normalized;
     this.quality = normalized;
     this.autoFps = Boolean(autoFps);
     this._applyQualitySettings(changed);
+    return this.quality;
   }
 
   _applyQualitySettings(rebuildScene = false) {
-    const dpr = window.devicePixelRatio || 1;
-    if (this.quality === 'ultra' || this.quality === 'high') {
-      this.quality = 'ultra';
-      this.currentPixelRatio = Math.min(dpr, 2.5);
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.toneMappingExposure = 1.08;
-    } else if (this.quality === 'balanced') {
-      this.currentPixelRatio = Math.min(dpr, 1.35);
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.toneMappingExposure = 1.06;
-    } else {
-      this.quality = 'fast';
-      const hdRatio = 720 / Math.max(1, window.innerHeight || 720);
-      this.currentPixelRatio = Math.min(1.0, Math.max(0.65, hdRatio));
-      this.renderer.shadowMap.enabled = false;
-      this.renderer.toneMappingExposure = 1.02;
-    }
-
-    this.remotes.setQuality(this.quality);
-    this.bots.castShadows = this.quality !== 'fast';
-    this.tanks.castShadows = this.quality !== 'fast';
-
-    this.renderer.setPixelRatio(this.currentPixelRatio);
-    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-
-    if (rebuildScene) {
-      this._initViewmodels();
-      this._updateViewmodelVisibility();
-      if (this.mapData) {
-        const activeMap = this.mapId || 'harbor';
-        this.mapData.dispose();
-        this.mapData = buildArenaMap(this.scene, this.textures, activeMap, this.quality);
+    if (this._switchingQuality) return;
+    this._switchingQuality = true;
+    try {
+      const dpr = window.devicePixelRatio || 1;
+      if (this.quality === 'ultra' || this.quality === 'high') {
+        this.quality = 'ultra';
+        this.currentPixelRatio = Math.min(Math.max(dpr, 1.5), 2.5);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMappingExposure = 1.08;
+      } else if (this.quality === 'balanced') {
+        this.currentPixelRatio = Math.min(dpr, 1.35);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMappingExposure = 1.08;
+      } else {
+        this.quality = 'fast';
+        const hdRatio = 720 / Math.max(1, window.innerHeight || 720);
+        this.currentPixelRatio = Math.min(1.0, Math.max(0.65, hdRatio));
+        this.renderer.shadowMap.enabled = false;
+        this.renderer.toneMappingExposure = 1.05;
       }
+
+      this.remotes.setQuality(this.quality);
+      this.bots.castShadows = this.quality !== 'fast';
+      this.tanks.castShadows = this.quality !== 'fast';
+
+      this.renderer.setPixelRatio(this.currentPixelRatio);
+      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+      if (rebuildScene) {
+        this._initViewmodels();
+        this._updateViewmodelVisibility();
+        if (this.mapData) {
+          const activeMap = this.mapId || 'harbor';
+          this.mapData.dispose();
+          this.mapData = buildArenaMap(this.scene, this.textures, activeMap, this.quality);
+        }
+        // Keep active tanks' shadows cleanly synchronized without resetting positions
+        if (this.tanks && Array.isArray(this.tanks.tanks)) {
+          const cast = this.quality !== 'fast';
+          for (const t of this.tanks.tanks) {
+            t.root?.traverse((obj) => {
+              if (obj.isMesh) {
+                obj.castShadow = cast;
+                obj.receiveShadow = cast;
+              }
+            });
+          }
+        }
+      }
+    } finally {
+      this._switchingQuality = false;
+      this.lastFrameTime = performance.now();
     }
   }
 
@@ -224,6 +264,7 @@ export class GameEngine {
     }
     this.mapId = mapId;
     this.mapData = buildArenaMap(this.scene, this.textures, mapId, this.quality);
+    this.lastFrameTime = performance.now();
   }
 
   previewMenuMap(mapId) {
@@ -264,7 +305,7 @@ export class GameEngine {
     this.setLoadout(operatorId, skinId);
 
     this._loadArena(mapId);
-    this.bots.spawnBots(botCount, this.mapData.config.spawns, difficulty, this.textures, this.quality);
+    this.bots.spawnBots(botCount, this.mapData.config.spawns, difficulty, this.quality, this.textures);
     this._spawnLocalPlayer(0);
 
     this.matchStartAt = Date.now();
@@ -274,6 +315,7 @@ export class GameEngine {
     this.controller.setActive(true);
     this.ui.showHud();
     this.ui.applyInputMode(this.controller.currentMode, this.controller.pointerLocked);
+    this.lastFrameTime = performance.now();
   }
 
   startMultiplayerMatch(room, localUser) {
@@ -300,6 +342,7 @@ export class GameEngine {
 
     this.handleRemotePlayersUpdate(room.players || {});
     this._syncLocalState(true);
+    this.lastFrameTime = performance.now();
   }
 
   resetMultiplayerRound(room) {
@@ -643,22 +686,32 @@ export class GameEngine {
 
   _loop(now) {
     requestAnimationFrame(this._loop);
-    const dt = Math.min(0.05, (now - this.lastFrameTime) / 1000);
+    const frameStart = performance.now();
+    const rawDtSec = Math.max(0.0005, (now - this.lastFrameTime) / 1000);
+    const dt = Math.min(0.05, rawDtSec);
     this.lastFrameTime = now;
     this.elapsedSec += dt;
 
+    // Ignore >350ms synchronous load/tab-switch gaps so HUD FPS/latency reflects active runtime performance
+    if (rawDtSec <= 0.35) {
+      const rawFps = Math.min(240, 1 / rawDtSec);
+      const rawMs = Math.max(1, rawDtSec * 1000);
+      const emaAlpha = 1 - Math.exp(-rawDtSec * 5.5);
+      this.fps = this.fps + (rawFps - this.fps) * emaAlpha;
+      this.frameMs = this.frameMs + (rawMs - this.frameMs) * emaAlpha;
+    }
+
     this.frameCount++;
-    this.fpsAccum += dt;
-    if (this.fpsAccum >= 0.5) {
-      this.fps = this.frameCount / this.fpsAccum;
+    this.fpsAccum += Math.min(0.2, rawDtSec);
+    if (this.fpsAccum >= 0.25) {
       this.frameCount = 0;
       this.fpsAccum = 0;
 
       if (this.autoFps && this.isRunning && this.quality !== 'fast') {
-        if (this.fps < 33) {
+        if (this.fps < 32) {
           this.lowFpsStreak++;
-          if (this.lowFpsStreak >= 2 && this.currentPixelRatio > 0.85) {
-            this.currentPixelRatio = Math.max(0.85, this.currentPixelRatio - 0.2);
+          if (this.lowFpsStreak >= 3 && this.currentPixelRatio > 0.85) {
+            this.currentPixelRatio = Math.max(0.85, this.currentPixelRatio - 0.15);
             this.renderer.setPixelRatio(this.currentPixelRatio);
           }
         } else {
@@ -672,9 +725,10 @@ export class GameEngine {
     }
 
     if (!this.isRunning) {
-      const t = now * 0.00014;
-      this.camera.position.set(Math.sin(t) * 44, 15 + Math.sin(t * 1.7) * 2.5, Math.cos(t) * 44);
-      this.camera.lookAt(0, 3.5, 0);
+      const t = now * 0.00018;
+      // Offset lookAt slightly left so the dynamic sunlit 3D arena fills the open right side of the menu
+      this.camera.position.set(Math.sin(t) * 34, 13.5 + Math.sin(t * 1.6) * 2.2, Math.cos(t) * 34);
+      this.camera.lookAt(-3.5, 3.2, 0);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -684,6 +738,11 @@ export class GameEngine {
     }
 
     this.renderer.render(this.scene, this.camera);
+    const workMs = Math.max(0.4, performance.now() - frameStart);
+    if (rawDtSec <= 0.35) {
+      // Track tight active CPU/render frame latency when GPU renders asynchronously or fast
+      this.frameMs = this.frameMs * 0.72 + Math.min(this.frameMs, workMs * 1.15 + 0.5) * 0.28;
+    }
   }
 
   _updateMatch(dt, nowMs) {
@@ -806,7 +865,9 @@ export class GameEngine {
       coaxAmmo: drivingTank?.coaxAmmo || 0,
       nearTank: Boolean(nearTank),
       fps: this.fps,
+      frameMs: this.frameMs,
       pingMs: this.mode === 'practice' ? 1 : (this.network.pingMs || 1),
+      mode: this.mode,
       timerSec: remainingSec,
       killLimit: this.killLimit,
       playerCount: this.mode === 'practice' ? 1 + this.bots.bots.length : Math.max(1, Object.keys(this.mpPlayers).length)

@@ -60,10 +60,22 @@ export class UIManager {
       wrWaitNote: document.getElementById('wr-wait-note'),
 
       armoryActiveTag: document.getElementById('armory-active-tag'),
+      armoryQuickBadge: document.getElementById('armory-quick-badge'),
+      btnQuickArmory: document.getElementById('btn-quick-armory'),
+      btnArmoryBack: document.getElementById('btn-armory-back'),
       loadoutOperator: document.getElementById('loadout-operator'),
       loadoutSkin: document.getElementById('loadout-skin'),
       previewTabs: Array.from(document.querySelectorAll('#preview-target-tabs .p-tab')),
       tierButtons: Array.from(document.querySelectorAll('#menu-graphics-bar .tier-btn')),
+      navTabs: Array.from(document.querySelectorAll('#lobby-nav .nav-tab')),
+      lobbyPanes: {
+        play: document.getElementById('pane-play'),
+        armory: document.getElementById('pane-armory'),
+        multiplayer: document.getElementById('pane-multiplayer')
+      },
+      mapPills: Array.from(document.querySelectorAll('#map-pill-grid .map-pill')),
+      practiceMap: document.getElementById('practice-map'),
+      optQualityUltra: document.getElementById('opt-quality-ultra'),
 
       settingsModal: document.getElementById('settings-modal'),
       btnQuitMatch: document.getElementById('btn-quit-match'),
@@ -75,12 +87,60 @@ export class UIManager {
       settingSound: document.getElementById('setting-sound')
     };
 
+    this.canRun4K = true;
     this.hitmarkerTimer = null;
     this.damageTimer = null;
+    this._lastTelemetryText = '';
+  }
+
+  setActiveTab(tabId = 'play') {
+    const validTab = this.el.lobbyPanes[tabId] ? tabId : 'play';
+    if (this.el.navTabs) {
+      this.el.navTabs.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.tab === validTab);
+      });
+    }
+    for (const [key, pane] of Object.entries(this.el.lobbyPanes)) {
+      if (!pane) continue;
+      const active = key === validTab;
+      pane.classList.toggle('hidden', !active);
+      pane.classList.toggle('active', active);
+    }
+    return validTab;
+  }
+
+  syncMapPills(mapId = 'harbor') {
+    if (this.el.practiceMap && this.el.practiceMap.value !== mapId) {
+      this.el.practiceMap.value = mapId;
+    }
+    if (this.el.mapPills) {
+      this.el.mapPills.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.map === mapId);
+      });
+    }
+  }
+
+  syncCapability({ canRun4K = true } = {}) {
+    this.canRun4K = Boolean(canRun4K);
+    if (this.el.tierButtons) {
+      const ultraBtn = this.el.tierButtons.find((b) => b.dataset.quality === 'ultra');
+      if (ultraBtn) {
+        ultraBtn.disabled = !this.canRun4K;
+        ultraBtn.title = this.canRun4K
+          ? 'PC High-Res 4K Ultra preset'
+          : '4K Ultra reserved for desktop PC GPUs — use HD CLEAN or 720p LOW POLY on iPad/Touch';
+        if (!this.canRun4K) ultraBtn.textContent = '4K ULTRA (PC ONLY)';
+        else ultraBtn.textContent = '4K ULTRA (PC)';
+      }
+    }
+    if (this.el.optQualityUltra) {
+      this.el.optQualityUltra.disabled = !this.canRun4K;
+    }
   }
 
   syncQualityControls(quality) {
-    const q = quality === 'high' ? 'ultra' : (quality || 'balanced');
+    let q = quality === 'high' ? 'ultra' : (quality || 'balanced');
+    if (q === 'ultra' && !this.canRun4K) q = 'balanced';
     if (this.el.settingQuality) {
       this.el.settingQuality.value = q;
     }
@@ -92,10 +152,15 @@ export class UIManager {
   }
 
   updateArmoryTag(operatorId, skinId) {
-    if (!this.el.armoryActiveTag) return;
     const opLabel = String(operatorId || 'vanguard').toUpperCase();
     const skinLabel = String(skinId || 'factory').replace(/_/g, ' ').toUpperCase();
-    this.el.armoryActiveTag.textContent = `${opLabel} · ${skinLabel}`;
+    const text = `${opLabel} · ${skinLabel}`;
+    if (this.el.armoryActiveTag) {
+      this.el.armoryActiveTag.textContent = text;
+    }
+    if (this.el.armoryQuickBadge) {
+      this.el.armoryQuickBadge.textContent = text;
+    }
   }
 
   showMenu() {
@@ -215,8 +280,15 @@ export class UIManager {
     }
   }
 
-  updateHud({ hp, activeSlot, weaponState, grenadesCount, reloading, isScoped, moveSpread, inTank, tankHp, cannonReadyPct, coaxAmmo, nearTank, fps, pingMs, timerSec, killLimit, playerCount }) {
-    this.el.hudTelemetry.textContent = `${Math.round(fps)} FPS · ${Math.max(1, Math.round(pingMs || 1))} ms`;
+  updateHud({ hp, activeSlot, weaponState, grenadesCount, reloading, isScoped, moveSpread, inTank, tankHp, cannonReadyPct, coaxAmmo, nearTank, fps, frameMs = 1, pingMs = 1, mode = 'practice', timerSec, killLimit, playerCount }) {
+    const latencyMs = mode === 'multiplayer'
+      ? Math.max(1, Math.round(pingMs || 1))
+      : Math.max(1, Math.round(frameMs || 1));
+    const telemetryText = `${Math.round(fps)} FPS · ${latencyMs} ms`;
+    if (telemetryText !== this._lastTelemetryText) {
+      this._lastTelemetryText = telemetryText;
+      this.el.hudTelemetry.textContent = telemetryText;
+    }
 
     const mins = Math.floor(Math.max(0, timerSec) / 60);
     const secs = Math.floor(Math.max(0, timerSec) % 60);

@@ -21,8 +21,52 @@ const engine = new GameEngine({
 window.coldboreEngine = engine;
 
 // ---------------------------------------------------------------------------
-// Interactive 3D Operator & Weapon Armory Preview Bay
+// Interactive 3D Operator & Weapon Armory Preview Bay (ResizeObserver + Studio IBL)
 // ---------------------------------------------------------------------------
+function createStudioEnvTexture() {
+  const w = 64;
+  const h = 32;
+  const data = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const v = y / (h - 1); // 0 = bottom in DataTexture, 1 = top
+    for (let x = 0; x < w; x++) {
+      const u = x / w;
+      const idx = (y * w + x) * 4;
+      let r, g, b;
+      if (v > 0.54) {
+        // Cool studio ceiling softbox + warm sun key lobe
+        const t = (v - 0.54) / 0.46;
+        const sunLobe = Math.pow(Math.max(0, Math.cos((u - 0.25) * Math.PI * 2)), 6) * 58;
+        r = 165 + t * 55 + sunLobe;
+        g = 185 + t * 48 + sunLobe * 0.9;
+        b = 212 + t * 38 + sunLobe * 0.72;
+      } else if (v > 0.46) {
+        // Warm bright horizon band
+        r = 214;
+        g = 212;
+        b = 205;
+      } else {
+        // Neutral charcoal workshop floor bounce
+        const t = v / 0.46;
+        r = 38 + t * 48;
+        g = 42 + t * 50;
+        b = 50 + t * 56;
+      }
+      data[idx] = Math.min(255, Math.round(r));
+      data[idx + 1] = Math.min(255, Math.round(g));
+      data[idx + 2] = Math.min(255, Math.round(b));
+      data[idx + 3] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 class ArmoryPreviewBay {
   constructor(canvas, textureLib) {
     this.canvas = canvas;
@@ -30,14 +74,21 @@ class ArmoryPreviewBay {
     this.target = 'operator';
     this.operatorId = 'vanguard';
     this.skinId = 'factory';
-    this.quality = 'ultra';
+    this.quality = 'balanced';
     this.activeGroup = null;
     this.activeSoldier = null;
+    this.isActiveTab = false;
+    this.yawOffset = 0.28;
+    this.dragVel = 0;
+    this._dragging = false;
+    this._lastDragX = 0;
 
     if (!this.canvas) return;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(40, this.canvas.width / this.canvas.height, 0.1, 30);
+    this.scene.environment = createStudioEnvTexture();
+    this.scene.environmentIntensity = 0.85;
+    this.camera = new THREE.PerspectiveCamera(30, 4 / 3, 0.1, 40);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
@@ -45,32 +96,97 @@ class ArmoryPreviewBay {
       alpha: true,
       preserveDrawingBuffer: true
     });
-    this.renderer.setSize(this.canvas.width, this.canvas.height, false);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.18;
+    this.renderer.toneMappingExposure = 1.15;
 
-    const hemi = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 1.1);
+    const hemi = new THREE.HemisphereLight(0xeef5ff, 0x334155, 1.18);
     this.scene.add(hemi);
 
-    const key = new THREE.DirectionalLight(0xfff7ed, 2.2);
-    key.position.set(3.2, 4.5, 4.0);
+    const key = new THREE.DirectionalLight(0xfff7ea, 2.35);
+    key.position.set(3.2, 4.6, 4.2);
     this.scene.add(key);
 
-    const rim = new THREE.DirectionalLight(0x38bdf8, 1.25);
-    rim.position.set(-3.5, 2.4, -3.0);
+    const fill = new THREE.DirectionalLight(0xdbeafe, 1.0);
+    fill.position.set(-3.4, 2.2, 3.0);
+    this.scene.add(fill);
+
+    const rim = new THREE.DirectionalLight(0xf59e0b, 0.85);
+    rim.position.set(-2.5, 3.0, -3.5);
     this.scene.add(rim);
 
-    // Subtle studio pedestal ring
-    const pedGeo = new THREE.CylinderGeometry(0.62, 0.7, 0.06, 28);
-    const pedMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.7 });
+    // Clean bevel-edged matte studio pedestal disc
+    const pedGeo = new THREE.CylinderGeometry(0.66, 0.72, 0.06, 36);
+    const pedMat = new THREE.MeshStandardMaterial({ color: 0x2a231c, roughness: 0.72, metalness: 0.18 });
     this.pedestal = new THREE.Mesh(pedGeo, pedMat);
     this.pedestal.position.y = -0.03;
     this.scene.add(this.pedestal);
 
+    const rimGeo = new THREE.TorusGeometry(0.67, 0.015, 8, 42);
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0xd9821e, roughness: 0.4, metalness: 0.5 });
+    const pedRing = new THREE.Mesh(rimGeo, rimMat);
+    pedRing.rotation.x = Math.PI / 2;
+    pedRing.position.y = 0.03;
+    this.pedestal.add(pedRing);
+
+    this._bindInteractions();
+    this.resize();
     this.rebuild();
+
+    if (typeof ResizeObserver !== 'undefined' && this.canvas.parentElement) {
+      this._ro = new ResizeObserver(() => this.resize());
+      this._ro.observe(this.canvas.parentElement);
+    }
+    window.addEventListener('resize', () => this.resize());
+
     this.lastTime = performance.now();
     this._tick = this._tick.bind(this);
     requestAnimationFrame(this._tick);
+  }
+
+  _bindInteractions() {
+    const host = this.canvas.parentElement || this.canvas;
+    host.addEventListener('pointerdown', (e) => {
+      if (e.target?.closest?.('.preview-tabs')) return;
+      this._dragging = true;
+      this._lastDragX = e.clientX;
+      this.dragVel = 0;
+      if (host.setPointerCapture) {
+        try { host.setPointerCapture(e.pointerId); } catch {}
+      }
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (!this._dragging) return;
+      const dx = e.clientX - this._lastDragX;
+      this._lastDragX = e.clientX;
+      this.yawOffset += dx * 0.011;
+      this.dragVel = dx * 0.28;
+    });
+    const endDrag = () => { this._dragging = false; };
+    host.addEventListener('pointerup', endDrag);
+    host.addEventListener('pointercancel', endDrag);
+  }
+
+  setVisible(visible) {
+    this.isActiveTab = Boolean(visible);
+    if (this.isActiveTab) {
+      this.resize();
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+  }
+
+  resize() {
+    if (!this.canvas || !this.renderer || !this.camera) return;
+    const host = this.canvas.parentElement || this.canvas;
+    const rect = host.getBoundingClientRect();
+    const w = rect.width > 20 ? Math.round(rect.width) : 640;
+    const h = rect.height > 20 ? Math.round(rect.height) : 440;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
   }
 
   setConfig({ target, operatorId, skinId, quality }) {
@@ -79,7 +195,12 @@ class ArmoryPreviewBay {
     if (operatorId && operatorId !== this.operatorId) { this.operatorId = operatorId; changed = true; }
     if (skinId && skinId !== this.skinId) { this.skinId = skinId; changed = true; }
     if (quality && quality !== this.quality) { this.quality = quality; changed = true; }
-    if (changed) this.rebuild();
+    if (changed) {
+      this.rebuild();
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
   }
 
   rebuild() {
@@ -102,9 +223,10 @@ class ArmoryPreviewBay {
       if (soldier.nameSprite) soldier.nameSprite.visible = false;
       this.activeSoldier = soldier;
       this.activeGroup = soldier.root;
+      this.activeGroup.rotation.y = this.yawOffset;
       this.scene.add(this.activeGroup);
-      this.camera.position.set(0, 1.08, 2.75);
-      this.camera.lookAt(0, 0.96, 0);
+      this.camera.position.set(0, 1.02, 3.85);
+      this.camera.lookAt(0, 0.94, 0);
     } else {
       this.pedestal.visible = false;
       const weapon = buildWeaponShowcaseMesh(this.target, {
@@ -114,20 +236,30 @@ class ArmoryPreviewBay {
         quality: this.quality === 'fast' ? 'balanced' : 'ultra'
       });
       this.activeGroup = weapon;
+      this.activeGroup.rotation.y = this.yawOffset;
       this.scene.add(this.activeGroup);
-      this.camera.position.set(0, 0.08, 0.92);
-      this.camera.lookAt(0, 0, 0);
+      this.camera.position.set(0, 0.06, 1.25);
+      this.camera.lookAt(0, 0.01, 0);
     }
   }
 
   _tick(now) {
     requestAnimationFrame(this._tick);
-    if (engine.isRunning) return;
+    if (engine.isRunning || !this.isActiveTab) return;
     const dt = Math.min(0.05, (now - this.lastTime) / 1000);
     this.lastTime = now;
 
+    if (!this._dragging) {
+      if (Math.abs(this.dragVel) > 0.01) {
+        this.yawOffset += this.dragVel * dt;
+        this.dragVel *= Math.exp(-dt * 4.5);
+      } else {
+        this.yawOffset += dt * 0.42;
+      }
+    }
+
     if (this.activeGroup) {
-      this.activeGroup.rotation.y += dt * 0.55;
+      this.activeGroup.rotation.y = this.yawOffset;
       if (this.activeSoldier) {
         animateSoldierModel(this.activeSoldier, dt, 0, 0, false);
       }
@@ -140,6 +272,31 @@ const armoryPreview = new ArmoryPreviewBay(
   document.getElementById('loadout-preview-canvas'),
   engine.textures
 );
+
+// Hardware 4K Guard & Tabbed Lobby Wiring
+ui.syncCapability(engine.capability);
+ui.syncQualityControls(engine.quality);
+
+let activeLobbyTab = 'play';
+function openLobbyTab(tabId) {
+  activeLobbyTab = ui.setActiveTab(tabId);
+  armoryPreview.setVisible(activeLobbyTab === 'armory');
+  if (activeLobbyTab === 'armory') {
+    requestAnimationFrame(() => armoryPreview.resize());
+  }
+}
+
+if (ui.el.navTabs) {
+  ui.el.navTabs.forEach((btn) => {
+    btn.addEventListener('click', () => openLobbyTab(btn.dataset.tab));
+  });
+}
+if (ui.el.btnQuickArmory) {
+  ui.el.btnQuickArmory.addEventListener('click', () => openLobbyTab('armory'));
+}
+if (ui.el.btnArmoryBack) {
+  ui.el.btnArmoryBack.addEventListener('click', () => openLobbyTab('play'));
+}
 
 function applyLoadoutSelection() {
   const operatorId = ui.el.loadoutOperator?.value || 'vanguard';
@@ -165,9 +322,9 @@ if (ui.el.previewTabs) {
 }
 
 // Live Graphics Tier switching from Menu Header Bar & Settings Modal
-function applyGraphicsTier(quality) {
+function applyGraphicsTier(quality, forceAllowUltra = false) {
   const autoFps = ui.el.settingAutofps ? ui.el.settingAutofps.checked : true;
-  engine.setQuality(quality, autoFps);
+  engine.setQuality(quality, autoFps, forceAllowUltra);
   ui.syncQualityControls(engine.quality);
   armoryPreview.setConfig({ quality: engine.quality });
 }
@@ -175,6 +332,7 @@ function applyGraphicsTier(quality) {
 if (ui.el.tierButtons) {
   ui.el.tierButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.disabled) return;
       applyGraphicsTier(btn.dataset.quality);
     });
   });
@@ -185,12 +343,25 @@ if (ui.el.settingQuality) {
   });
 }
 
+if (ui.el.mapPills) {
+  ui.el.mapPills.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mapId = btn.dataset.map;
+      ui.syncMapPills(mapId);
+      engine.previewMenuMap(mapId);
+    });
+  });
+}
+
 const practiceMapSelect = document.getElementById('practice-map');
 if (practiceMapSelect) {
   practiceMapSelect.addEventListener('change', (e) => {
+    ui.syncMapPills(e.target.value);
     engine.previewMenuMap(e.target.value);
   });
 }
+applyLoadoutSelection();
+openLobbyTab('play');
 
 // ---------------------------------------------------------------------------
 // Firebase Lobby & Matchmaking
@@ -438,16 +609,27 @@ const e2eMode = e2eParams.get('e2e');
 if (e2eMode) {
   const op = e2eParams.get('op') || 'vanguard';
   const skin = e2eParams.get('skin') || 'damascus';
-  const quality = e2eParams.get('quality') || 'ultra';
+  const quality = e2eParams.get('quality') || 'balanced';
   const target = e2eParams.get('target') || 'operator';
+  const tab = e2eParams.get('tab') || 'play';
+  const mapPreview = e2eParams.get('map');
 
   if (ui.el.loadoutOperator) ui.el.loadoutOperator.value = op;
   if (ui.el.loadoutSkin) ui.el.loadoutSkin.value = skin;
   applyLoadoutSelection();
-  applyGraphicsTier(quality);
-  armoryPreview.setConfig({ target, operatorId: op, skinId: skin, quality });
+  applyGraphicsTier(quality, true);
+  if (ui.el.previewTabs) {
+    ui.el.previewTabs.forEach((b) => b.classList.toggle('active', b.dataset.target === target));
+  }
+  armoryPreview.setConfig({ target, operatorId: op, skinId: skin, quality: engine.quality });
 
-  if (e2eMode === 'harbor' || e2eMode === 'desert' || e2eMode === 'snow') {
+  if (e2eMode === 'menu') {
+    if (mapPreview) {
+      ui.syncMapPills(mapPreview);
+      engine.previewMenuMap(mapPreview);
+    }
+    openLobbyTab(tab);
+  } else if (e2eMode === 'harbor' || e2eMode === 'desert' || e2eMode === 'snow') {
     engine.startPracticeMatch({
       mapId: e2eMode,
       botCount: 4,
@@ -463,22 +645,22 @@ if (e2eMode) {
     // Position camera at a scenic vantage point to verify biome landmarks + 1P weapon + HUD
     if (e2eMode === 'harbor') {
       // Overlooking container yard, forklift, sandy beach cove & shipping channel with cargo ship
-      const gx = Number(e2eParams.get('x') ?? 26);
-      const gz = Number(e2eParams.get('z') ?? -38);
+      const gx = Number(e2eParams.get('x') ?? 24);
+      const gz = Number(e2eParams.get('z') ?? -30);
       const gy = (engine.mapData.terrainHeightFn ? engine.mapData.terrainHeightFn(gx, gz) : 0) + 1.75;
       engine.controller.pos.set(gx, gy, gz);
       engine.controller.yaw = Number(e2eParams.get('yaw') ?? -0.35);
       engine.controller.pitch = Number(e2eParams.get('pitch') ?? -0.04);
     } else if (e2eMode === 'desert') {
-      // Overlooking sunken temple colonnade, ancient sculptures, broken vases & sand mounds
-      const gx = Number(e2eParams.get('x') ?? -14);
-      const gz = Number(e2eParams.get('z') ?? 20);
+      // Overlooking stepped desert temple courtyard, obelisks, guardian sculptures, broken vases & sand mounds
+      const gx = Number(e2eParams.get('x') ?? -20);
+      const gz = Number(e2eParams.get('z') ?? 24);
       const gy = (engine.mapData.terrainHeightFn ? engine.mapData.terrainHeightFn(gx, gz) : 0) + 1.75;
       engine.controller.pos.set(gx, gy, gz);
-      engine.controller.yaw = Number(e2eParams.get('yaw') ?? -0.58);
-      engine.controller.pitch = Number(e2eParams.get('pitch') ?? -0.05);
+      engine.controller.yaw = Number(e2eParams.get('yaw') ?? -0.68);
+      engine.controller.pitch = Number(e2eParams.get('pitch') ?? -0.04);
     } else if (e2eMode === 'snow') {
-      // Overlooking walkable viaduct bridge arch, snowcat vehicle, ice spires & alpine bunker
+      // Overlooking walkable glacier viaduct bridge arch, snowcat vehicle, ice spires & alpine bunker
       const gx = Number(e2eParams.get('x') ?? -16);
       const gz = Number(e2eParams.get('z') ?? 24);
       const gy = (engine.mapData.terrainHeightFn ? engine.mapData.terrainHeightFn(gx, gz) : 0) + 1.75;
