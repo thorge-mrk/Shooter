@@ -17,7 +17,7 @@ export class GameEngine {
     this.ui = ui;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.08, 320);
+    this.camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.08, 340);
     this.scene.add(this.camera);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -25,7 +25,7 @@ export class GameEngine {
       powerPreference: 'high-performance'
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 1.06;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
@@ -46,7 +46,7 @@ export class GameEngine {
     this.viewmodels = {};
     this._initViewmodels();
 
-    // Settings & Performance state
+    // Performance & FPS
     this.quality = 'balanced';
     this.autoFps = true;
     this.fps = 60;
@@ -54,19 +54,21 @@ export class GameEngine {
     this.fpsAccum = 0;
     this.currentPixelRatio = 1.25;
     this.lowFpsStreak = 0;
+    this.elapsedSec = 0;
 
     // Match state
     this.isRunning = false;
     this.isPaused = false;
-    this.mode = 'practice'; // 'practice' | 'multiplayer'
+    this.mode = 'practice';
     this.mapData = null;
-    this.mapId = 'compound';
+    this.mapId = 'harbor';
     this.killLimit = 15;
     this.durationSec = 180;
     this.matchStartAt = 0;
     this.roundEnded = false;
+    this.botDifficulty = 'tactical';
 
-    // Local Player state
+    // Local Player
     this.localId = 'local';
     this.localName = 'Operator';
     this.hp = 100;
@@ -77,17 +79,19 @@ export class GameEngine {
     this.deaths = 0;
     this.inTankId = -1;
 
-    // Weapon state
+    // Weapon & Animation state
     this.inventory = createWeaponInventory();
     this.activeSlot = 0;
     this.lastShotAt = 0;
     this.reloading = false;
     this.reloadEndAt = 0;
     this.recoilOffset = 0;
+    this.recoilRecoverPitch = 0;
+    this.drawDrop = 0;
+    this.vmFlashTimer = 0;
     this.walkBobPhase = 0;
     this.prevTrigger = false;
 
-    // Multiplayer scoreboard cache
     this.mpPlayers = {};
     this.scoreboardHeld = false;
 
@@ -157,17 +161,18 @@ export class GameEngine {
     this.renderer.setSize(w, h, false);
   }
 
-  startPracticeMatch({ mapId = 'compound', botCount = 3, killLimit = 15, playerName = 'Operator' }) {
+  startPracticeMatch({ mapId = 'harbor', botCount = 3, killLimit = 15, difficulty = 'tactical', playerName = 'Operator' }) {
     this._teardownMatch();
     this.mode = 'practice';
     this.mapId = mapId;
     this.killLimit = killLimit;
     this.durationSec = 180;
+    this.botDifficulty = difficulty;
     this.localId = 'local';
     this.localName = playerName || 'Operator';
 
     this._loadArena(mapId);
-    this.bots.spawnBots(botCount, this.mapData.config.spawns);
+    this.bots.spawnBots(botCount, this.mapData.config.spawns, difficulty);
     this._spawnLocalPlayer(0);
 
     this.matchStartAt = Date.now();
@@ -182,7 +187,7 @@ export class GameEngine {
   startMultiplayerMatch(room, localUser) {
     this._teardownMatch();
     this.mode = 'multiplayer';
-    this.mapId = room.mapId || 'compound';
+    this.mapId = room.mapId || 'harbor';
     this.killLimit = room.killLimit || 15;
     this.durationSec = room.durationSec || 180;
     this.localId = localUser.uid;
@@ -200,6 +205,24 @@ export class GameEngine {
     this.controller.setActive(true);
     this.ui.showHud();
     this.ui.applyInputMode(this.controller.currentMode, this.controller.pointerLocked);
+
+    this._syncLocalState(true);
+  }
+
+  resetMultiplayerRound(room) {
+    if (!this.isRunning || this.mode !== 'multiplayer') return;
+    this.kills = 0;
+    this.deaths = 0;
+    this.roundEnded = false;
+    this.matchStartAt = room.roundStartAt || Date.now();
+    this.ui.setScoreboardVisible(false);
+
+    this.tanks.spawnTanks(this.mapData.config.tankPads);
+    const uids = Object.keys(room.players || {}).sort();
+    const spawnIdx = Math.max(0, uids.indexOf(this.localId));
+    this._spawnLocalPlayer(spawnIdx);
+    this.controller.setActive(true);
+    this._syncLocalState(true);
   }
 
   _loadArena(mapId) {
@@ -210,16 +233,20 @@ export class GameEngine {
   _spawnLocalPlayer(spawnIndex) {
     const spawns = this.mapData.config.spawns;
     const sp = spawns[spawnIndex % spawns.length];
-    this.controller.pos.set(sp.x, sp.y, sp.z);
+    const groundY = this.mapData.terrainHeightFn ? this.mapData.terrainHeightFn(sp.x, sp.z) : 0;
+    this.controller.pos.set(sp.x, groundY + 1.7, sp.z);
+    this.controller.vel.set(0, 0, 0);
     this.controller.velY = 0;
     this.controller.yaw = sp.yaw || 0;
     this.controller.pitch = 0;
+    this.recoilRecoverPitch = 0;
     this.hp = 100;
     this.alive = true;
     this.inTankId = -1;
     this.inventory = createWeaponInventory();
     this.activeSlot = 0;
     this.reloading = false;
+    this.drawDrop = 0.22;
     this.ui.showEliminated(false);
     this._updateViewmodelVisibility();
   }
@@ -263,6 +290,9 @@ export class GameEngine {
   switchWeapon(slot) {
     if (!this.isRunning || !this.alive || this.inTankId >= 0) return;
     if (slot < 0 || slot >= this.inventory.length) return;
+    if (this.activeSlot !== slot) {
+      this.drawDrop = 0.2;
+    }
     this.activeSlot = slot;
     this.reloading = false;
     this.controller.touchAds = false;
@@ -274,6 +304,9 @@ export class GameEngine {
     const activeId = this.inventory[this.activeSlot]?.spec.id;
     for (const [id, mesh] of Object.entries(this.viewmodels)) {
       mesh.visible = show && id === activeId;
+      if (mesh.userData.muzzleFlash) {
+        mesh.userData.muzzleFlash.visible = false;
+      }
     }
   }
 
@@ -313,19 +346,33 @@ export class GameEngine {
     if (!this.isRunning || !this.alive) return;
     if (this.inTankId >= 0) {
       const tank = this.tanks.getTankById(this.inTankId);
+      this.inTankId = -1;
       if (tank) {
         tank.driverId = '';
-        this.controller.pos.set(tank.x + 3.2, 1.7, tank.z);
+        const exitX = tank.x + Math.cos(tank.yaw) * 3.4;
+        const exitZ = tank.z - Math.sin(tank.yaw) * 3.4;
+        const exitY = (this.mapData?.terrainHeightFn ? this.mapData.terrainHeightFn(exitX, exitZ) : 0) + 1.7;
+        this.controller.pos.set(exitX, exitY, exitZ);
+        this.controller.vel.set(0, 0, 0);
+
         if (this.mode === 'multiplayer') {
+          this.network.syncTankState(tank.id, {
+            driverUid: '',
+            x: tank.x,
+            z: tank.z,
+            yaw: tank.yaw,
+            turretYaw: tank.turretYaw,
+            hp: tank.hp
+          });
           this.network.sendEvent({ type: 'tankExit', tankId: tank.id });
         }
       }
-      this.inTankId = -1;
       this._updateViewmodelVisibility();
+      if (this.mode === 'multiplayer') this._syncLocalState(true);
       return;
     }
 
-    const near = this.tanks.findNearestEnterableTank(this.controller.pos, 5.2);
+    const near = this.tanks.findNearestEnterableTank(this.controller.pos, 5.4);
     if (near) {
       near.driverId = this.localId;
       this.inTankId = near.id;
@@ -333,18 +380,55 @@ export class GameEngine {
       this.controller.touchAds = false;
       this._updateViewmodelVisibility();
       if (this.mode === 'multiplayer') {
+        this.network.syncTankState(near.id, {
+          driverUid: this.localId,
+          x: near.x,
+          z: near.z,
+          yaw: near.yaw,
+          turretYaw: near.turretYaw,
+          hp: near.hp
+        });
         this.network.sendEvent({ type: 'tankClaim', tankId: near.id });
+        this._syncLocalState(true);
       }
     }
   }
 
-  // Multiplayer incoming snapshots & events
+  _syncLocalState(force = false) {
+    if (this.mode !== 'multiplayer') return;
+    this.network.syncPlayerState({
+      x: this.controller.pos.x,
+      y: this.controller.pos.y,
+      z: this.controller.pos.z,
+      vx: this.controller.vel.x,
+      vy: this.controller.vel.y,
+      vz: this.controller.vel.z,
+      yaw: this.controller.yaw,
+      pitch: this.controller.pitch,
+      alive: this.alive,
+      hp: this.hp,
+      kills: this.kills,
+      deaths: this.deaths,
+      weapon: this.activeSlot,
+      inTankId: this.inTankId
+    }, force);
+  }
+
   handleRemotePlayersUpdate(playersObj) {
     this.mpPlayers = playersObj || {};
     if (!this.isRunning || this.mode !== 'multiplayer') return;
     this.remotes.syncSnapshot(this.mpPlayers, this.localId);
 
-    // Host checks win condition
+    // Ensure any tank whose previous driver now reports inTankId !== tank.id is cleanly released
+    for (const tank of this.tanks.tanks) {
+      if (tank.driverId && tank.driverId !== this.localId) {
+        const dp = this.mpPlayers[tank.driverId];
+        if (!dp || dp.inTankId !== tank.id || dp.alive === false) {
+          tank.driverId = '';
+        }
+      }
+    }
+
     if (this.network.isHost && !this.roundEnded) {
       for (const p of Object.values(this.mpPlayers)) {
         if ((p.kills || 0) >= this.killLimit) {
@@ -361,22 +445,26 @@ export class GameEngine {
       for (const [idStr, tData] of Object.entries(room.tanks)) {
         const tank = this.tanks.getTankById(Number(idStr));
         if (!tank || tank.driverId === this.localId) continue;
+
         tank.hp = tData.hp ?? tank.hp;
-        tank.driverId = tData.driverUid || '';
         tank.destroyed = tank.hp <= 0;
-        if (!tank.driverId && !tank.destroyed && typeof tData.x === 'number') {
-          tank.x = tData.x;
-          tank.z = tData.z;
-          tank.yaw = tData.yaw || 0;
-          tank.turretYaw = tData.turretYaw || 0;
-        }
-        // Mirror active driver state
-        if (tank.driverId && this.mpPlayers[tank.driverId]) {
-          const dp = this.mpPlayers[tank.driverId];
-          tank.x = dp.x ?? tank.x;
-          tank.z = dp.z ?? tank.z;
-          tank.yaw = dp.tankYaw ?? tank.yaw;
-          tank.turretYaw = dp.tankTurretYaw ?? tank.turretYaw;
+
+        // Cross-check player snapshot so stale RTDB driverUid never locks a player inside a tank
+        const candidateUid = tData.driverUid || '';
+        const candidatePlayer = candidateUid ? this.mpPlayers[candidateUid] : null;
+        const confirmedDriver = candidateUid && candidatePlayer && candidatePlayer.inTankId === tank.id && candidatePlayer.alive !== false
+          ? candidateUid
+          : '';
+        tank.driverId = confirmedDriver;
+
+        if (!tank.destroyed && typeof tData.x === 'number') {
+          this.tanks.setRemoteTarget(
+            tank,
+            tData.x,
+            tData.z,
+            tData.yaw ?? tank.yaw,
+            tData.turretYaw ?? tank.turretYaw
+          );
         }
       }
     }
@@ -390,6 +478,7 @@ export class GameEngine {
       const start = new THREE.Vector3(ev.sx, ev.sy, ev.sz);
       const end = new THREE.Vector3(ev.ex, ev.ey, ev.ez);
       this.particles.spawnTracer(start, end);
+      this.remotes.triggerShotFlash(ev.senderUid);
       const dist = start.distanceTo(this.controller.pos);
       this.sound.playShot(ev.weaponId, Math.max(0.1, 1 - dist / 70));
     } else if (ev.type === 'hit' && ev.targetUid === this.localId && this.alive) {
@@ -408,6 +497,8 @@ export class GameEngine {
       const origin = new THREE.Vector3(ev.ox, ev.oy, ev.oz);
       const dir = new THREE.Vector3(ev.dx, ev.dy, ev.dz);
       this.tanks.spawnShell(origin, dir, ev.senderUid, false);
+      const tank = this.tanks.tanks.find((t) => t.driverId === ev.senderUid);
+      if (tank) this.tanks.triggerBarrelRecoil(tank);
       const dist = origin.distanceTo(this.controller.pos);
       this.sound.playTankCannon(Math.max(0.15, 1 - dist / 85));
     } else if (ev.type === 'tankClaim') {
@@ -425,12 +516,7 @@ export class GameEngine {
     } else if (ev.type === 'roundEnd') {
       this._endRound(ev.winnerName || 'Operator', false);
     } else if (ev.type === 'roundReset') {
-      this.kills = 0;
-      this.deaths = 0;
-      this.roundEnded = false;
-      this.ui.setScoreboardVisible(false);
-      this._spawnLocalPlayer(0);
-      this.controller.setActive(true);
+      this.resetMultiplayerRound({ roundStartAt: ev.roundStartAt, players: this.mpPlayers });
     }
   }
 
@@ -438,8 +524,8 @@ export class GameEngine {
     requestAnimationFrame(this._loop);
     const dt = Math.min(0.05, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
+    this.elapsedSec += dt;
 
-    // FPS tracking & Adaptive PixelRatio scaler for iPad 30-60 FPS
     this.frameCount++;
     this.fpsAccum += dt;
     if (this.fpsAccum >= 0.5) {
@@ -462,12 +548,15 @@ export class GameEngine {
     }
 
     if (!this.isRunning) {
-      // Gentle idle camera pan behind menu
       const t = now * 0.00018;
       this.camera.position.set(Math.sin(t) * 28, 12, Math.cos(t) * 28);
       this.camera.lookAt(0, 2, 0);
       this.renderer.render(this.scene, this.camera);
       return;
+    }
+
+    if (this.mapData) {
+      this.mapData.update(dt, this.elapsedSec);
     }
 
     if (!this.isPaused && !this.roundEnded) {
@@ -478,7 +567,6 @@ export class GameEngine {
   }
 
   _updateMatch(dt, nowMs) {
-    // Round timer check
     const elapsedSec = (Date.now() - this.matchStartAt) / 1000;
     const remainingSec = Math.max(0, this.durationSec - elapsedSec);
     if (remainingSec <= 0 && !this.roundEnded) {
@@ -488,7 +576,6 @@ export class GameEngine {
       }
     }
 
-    // Handle local respawn
     if (!this.alive) {
       const left = Math.max(0, (this.respawnAt - nowMs) / 1000);
       this.ui.showEliminated(true, this.killerName, left);
@@ -497,7 +584,6 @@ export class GameEngine {
       }
     }
 
-    // Reload completion
     if (this.reloading && nowMs >= this.reloadEndAt) {
       const w = this.inventory[this.activeSlot];
       if (w) {
@@ -509,10 +595,17 @@ export class GameEngine {
       this.reloading = false;
     }
 
-    // Movement & Camera
+    // Smooth CS2-style recoil pitch recovery when not firing
+    if (this.recoilRecoverPitch > 0 && !this.controller.isFiring()) {
+      const recover = Math.min(this.recoilRecoverPitch, dt * 0.24);
+      this.controller.pitch = Math.max(-1.45, this.controller.pitch - recover);
+      this.recoilRecoverPitch -= recover;
+    }
+
     let moveMag = 0;
     const activeWeapon = this.inventory[this.activeSlot];
     const isAds = this.alive && this.inTankId < 0 && this.controller.isAds();
+    const terrainFn = this.mapData.terrainHeightFn;
 
     if (this.alive) {
       if (this.inTankId >= 0) {
@@ -522,8 +615,8 @@ export class GameEngine {
           this._updateViewmodelVisibility();
         } else {
           const { forward, strafe } = this.controller.getMovementAxes();
-          this.tanks.driveTank(tank, forward, -strafe, this.controller.yaw, this.controller.pitch, this.mapData.colliders, dt);
-          this.controller.pos.set(tank.x, 2.0, tank.z);
+          this.tanks.driveTank(tank, forward, -strafe, this.controller.yaw, this.controller.pitch, this.mapData.colliders, dt, terrainFn);
+          this.controller.pos.set(tank.x, tank.y + 2.0, tank.z);
           this._updateTankChaseCamera(tank);
           this._handleTankFiring(tank, nowMs);
           if (this.mode === 'multiplayer') {
@@ -533,7 +626,7 @@ export class GameEngine {
           }
         }
       } else {
-        moveMag = this.controller.updateOnFoot(dt, this.mapData.colliders, isAds);
+        moveMag = this.controller.updateOnFoot(dt, this.mapData.colliders, isAds, terrainFn);
         this.camera.position.copy(this.controller.pos);
         this.camera.rotation.set(this.controller.pitch, this.controller.yaw, 0, 'YXZ');
         this._updateFovAndViewmodel(dt, activeWeapon, isAds, moveMag);
@@ -541,43 +634,26 @@ export class GameEngine {
       }
     }
 
-    // Update Supply Crates
     this._updateSupplyCrates(dt, nowMs);
 
-    // Update Tanks, Grenades, Particles, Remotes, Bots
     this.tanks.update(dt, nowMs, this.mapData.colliders, (pos, ownerId, isLocal) => {
       this._triggerExplosion(pos, 8.2, 130, 145, ownerId, isLocal, '120MM CANNON');
-    });
+    }, terrainFn, this.localId);
 
     this.grenades.update(dt, this.mapData.colliders, (pos, ownerId, isLocal) => {
       this._triggerExplosion(pos, 7.5, 115, 115, ownerId, isLocal, 'HE-67 FRAG');
-    });
+    }, terrainFn);
 
-    this.particles.update(dt);
+    this.particles.update(dt, terrainFn);
     this.remotes.update(dt);
 
     if (this.mode === 'practice') {
       this._updateBots(dt, nowMs);
     } else {
-      this.network.syncPlayerState({
-        x: this.controller.pos.x,
-        y: this.controller.pos.y,
-        z: this.controller.pos.z,
-        yaw: this.controller.yaw,
-        pitch: this.controller.pitch,
-        alive: this.alive,
-        hp: this.hp,
-        kills: this.kills,
-        deaths: this.deaths,
-        weapon: this.activeSlot,
-        inTankId: this.inTankId,
-        tankYaw: this.inTankId >= 0 ? (this.tanks.getTankById(this.inTankId)?.yaw || 0) : 0,
-        tankTurretYaw: this.inTankId >= 0 ? (this.tanks.getTankById(this.inTankId)?.turretYaw || 0) : 0
-      });
+      this._syncLocalState(false);
     }
 
-    // Update HUD
-    const nearTank = this.alive && this.inTankId < 0 ? this.tanks.findNearestEnterableTank(this.controller.pos, 5.2) : null;
+    const nearTank = this.alive && this.inTankId < 0 ? this.tanks.findNearestEnterableTank(this.controller.pos, 5.4) : null;
     const drivingTank = this.inTankId >= 0 ? this.tanks.getTankById(this.inTankId) : null;
     const cannonReadyPct = drivingTank ? Math.min(1, (nowMs - drivingTank.lastCannonAt) / TANK_CANNON_COOLDOWN_MS) : 1;
     const isScoped = Boolean(isAds && activeWeapon?.spec.isScope);
@@ -596,6 +672,7 @@ export class GameEngine {
       coaxAmmo: drivingTank?.coaxAmmo || 0,
       nearTank: Boolean(nearTank),
       fps: this.fps,
+      pingMs: this.mode === 'practice' ? 1 : (this.network.pingMs || 1),
       timerSec: remainingSec,
       killLimit: this.killLimit,
       playerCount: this.mode === 'practice' ? 1 + this.bots.bots.length : Math.max(1, Object.keys(this.mpPlayers).length)
@@ -609,12 +686,12 @@ export class GameEngine {
       this.camera.updateProjectionMatrix();
     }
 
-    const lookTarget = new THREE.Vector3(tank.x, 2.35, tank.z);
+    const lookTarget = new THREE.Vector3(tank.x, tank.y + 2.35, tank.z);
     const backDir = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(this.controller.pitch * 0.45, this.controller.yaw, 0, 'YXZ')).normalize();
     const desiredCamPos = lookTarget.clone().addScaledVector(backDir, 8.6);
-    desiredCamPos.y = Math.max(1.4, desiredCamPos.y + 1.6);
+    const groundAtCam = this.mapData.terrainHeightFn ? this.mapData.terrainHeightFn(desiredCamPos.x, desiredCamPos.z) : 0;
+    desiredCamPos.y = Math.max(groundAtCam + 1.4, desiredCamPos.y + 1.6);
 
-    // Wall-clamp raycast so chase cam doesn't clip behind concrete blocks
     const rayDir = new THREE.Vector3().subVectors(desiredCamPos, lookTarget);
     const dist = rayDir.length();
     rayDir.normalize();
@@ -641,22 +718,36 @@ export class GameEngine {
     if (!vm) return;
 
     vm.visible = !isScoped;
+    if (vm.userData.muzzleFlash) {
+      if (this.vmFlashTimer > 0 && !isScoped) {
+        this.vmFlashTimer -= dt;
+        vm.userData.muzzleFlash.visible = this.vmFlashTimer > 0;
+        vm.userData.muzzleFlash.rotation.z += dt * 45;
+      } else {
+        vm.userData.muzzleFlash.visible = false;
+      }
+    }
+
     if (isScoped) return;
 
     const target = isAds ? weaponState.spec.adsPos : weaponState.spec.hipPos;
-    this.recoilOffset = Math.max(0, this.recoilOffset - dt * 0.35);
+    this.recoilOffset = Math.max(0, this.recoilOffset - dt * 0.36);
+    this.drawDrop = Math.max(0, this.drawDrop - dt * 1.15);
 
     if (moveMag > 0.1 && this.controller.onGround) {
-      this.walkBobPhase += dt * (isAds ? 6 : 10);
+      this.walkBobPhase += dt * (isAds ? 6 : 10.5);
+    } else {
+      this.walkBobPhase += dt * 1.6;
     }
-    const bobX = Math.cos(this.walkBobPhase) * (isAds ? 0.002 : 0.009) * moveMag;
-    const bobY = Math.abs(Math.sin(this.walkBobPhase)) * (isAds ? 0.002 : 0.01) * moveMag;
-    const reloadTilt = this.reloading ? -0.45 : 0;
+
+    const bobX = Math.cos(this.walkBobPhase) * (moveMag > 0.1 ? (isAds ? 0.002 : 0.009) * moveMag : 0.0015);
+    const bobY = Math.abs(Math.sin(this.walkBobPhase)) * (moveMag > 0.1 ? (isAds ? 0.002 : 0.01) * moveMag : 0.002);
+    const reloadTilt = this.reloading ? -0.52 : 0;
 
     vm.position.x += (target[0] + bobX - vm.position.x) * Math.min(1, dt * 16);
-    vm.position.y += (target[1] - bobY - (this.reloading ? 0.08 : 0) - vm.position.y) * Math.min(1, dt * 16);
+    vm.position.y += (target[1] - bobY - this.drawDrop - (this.reloading ? 0.09 : 0) - vm.position.y) * Math.min(1, dt * 16);
     vm.position.z += (target[2] + this.recoilOffset - vm.position.z) * Math.min(1, dt * 20);
-    vm.rotation.x += (this.recoilOffset * 1.4 + reloadTilt - vm.rotation.x) * Math.min(1, dt * 16);
+    vm.rotation.x += (this.recoilOffset * 1.5 + reloadTilt - this.drawDrop * 1.2 - vm.rotation.x) * Math.min(1, dt * 16);
   }
 
   _handleOnFootFiring(nowMs, weaponState, isAds) {
@@ -684,15 +775,14 @@ export class GameEngine {
     this.lastShotAt = nowMs;
     weaponState.mag -= 1;
     this.sound.playShot(weaponState.spec.id, 1.0);
+    this.vmFlashTimer = 0.055;
 
-    // Recoil kick
-    this.recoilOffset = Math.min(0.08, this.recoilOffset + 0.032);
-    this.controller.pitch = Math.min(1.45, this.controller.pitch + weaponState.spec.recoilPitch * (isAds ? 0.65 : 1));
-    this.controller.yaw += (Math.random() - 0.5) * weaponState.spec.recoilYaw;
-
+    // IMPORTANT: Capture exact aim ray BEFORE applying recoil kick so Sniper & Rifle shoot dead-center on crosshair!
     const spread = isAds ? weaponState.spec.spreadAds : weaponState.spec.spreadHip;
     const origin = this.camera.position.clone();
-    const baseDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(this.controller.pitch, this.controller.yaw, 0, 'YXZ')).normalize();
+    const baseDir = new THREE.Vector3(0, 0, -1)
+      .applyEuler(new THREE.Euler(this.controller.pitch, this.controller.yaw, 0, 'YXZ'))
+      .normalize();
     const muzzleStart = origin.clone().addScaledVector(baseDir, 0.55);
     muzzleStart.y -= 0.1;
 
@@ -704,16 +794,18 @@ export class GameEngine {
 
     for (let p = 0; p < weaponState.spec.pellets; p++) {
       const dir = baseDir.clone();
-      dir.x += (Math.random() - 0.5) * spread * 2;
-      dir.y += (Math.random() - 0.5) * spread * 2;
-      dir.z += (Math.random() - 0.5) * spread * 2;
-      dir.normalize();
+      if (spread > 0) {
+        dir.x += (Math.random() - 0.5) * spread * 2;
+        dir.y += (Math.random() - 0.5) * spread * 2;
+        dir.z += (Math.random() - 0.5) * spread * 2;
+        dir.normalize();
+      }
 
       this.raycaster.set(origin, dir);
       this.raycaster.far = weaponState.spec.range;
       const hits = this.raycaster.intersectObjects(targetMeshes, false);
 
-      let endPoint = origin.clone().addScaledVector(dir, 75);
+      let endPoint = origin.clone().addScaledVector(dir, 85);
       if (hits.length > 0) {
         const hit = hits[0];
         endPoint = hit.point;
@@ -724,7 +816,7 @@ export class GameEngine {
           const dmg = Math.round(weaponState.spec.damage * (isHead ? weaponState.spec.headshotMult : 1));
           this.ui.flashHitmarker(isHead);
           this.sound.playHitmarker(isHead);
-          this._registerHitOnTarget(meta.playerId, dmg, weaponState.spec.shortName, isHead);
+          this._registerHitOnTarget(meta.playerId, dmg, weaponState.spec.shortName);
         } else if (meta?.entityType === 'tank') {
           const tank = this.tanks.getTankById(meta.tankId);
           if (tank) {
@@ -733,9 +825,9 @@ export class GameEngine {
             this.sound.playHitmarker(false);
             this._damageTank(tank, dmg, this.localId, this.localName, true);
           }
-          this.particles.spawnImpact(hit.point, hit.face?.normal, 4);
+          this.particles.spawnImpact(hit.point, hit.face?.normal, 5);
         } else {
-          this.particles.spawnImpact(hit.point, hit.face?.normal, 4);
+          this.particles.spawnImpact(hit.point, hit.face?.normal, 5);
         }
       }
 
@@ -750,6 +842,13 @@ export class GameEngine {
       }
     }
 
+    // Apply visual recoil AFTER shot raycast completes
+    this.recoilOffset = Math.min(0.085, this.recoilOffset + 0.034);
+    const pitchKick = weaponState.spec.recoilPitch * (isAds ? 0.55 : 1);
+    this.controller.pitch = Math.min(1.45, this.controller.pitch + pitchKick);
+    this.recoilRecoverPitch = Math.min(0.16, this.recoilRecoverPitch + pitchKick * 0.78);
+    this.controller.yaw += (Math.random() - 0.5) * weaponState.spec.recoilYaw;
+
     if (weaponState.mag === 0 && weaponState.reserve > 0) {
       this.startReload();
     }
@@ -761,6 +860,7 @@ export class GameEngine {
 
     if (primary && nowMs - tank.lastCannonAt >= TANK_CANNON_COOLDOWN_MS) {
       tank.lastCannonAt = nowMs;
+      this.tanks.triggerBarrelRecoil(tank);
       const { origin, dir } = this.tanks.getCannonMuzzlePose(tank);
       this.tanks.spawnShell(origin, dir, this.localId, true);
       this.sound.playTankCannon(1.0);
@@ -798,7 +898,7 @@ export class GameEngine {
         const meta = hits[0].object.userData;
         this.ui.flashHitmarker(false);
         this.sound.playHitmarker(false);
-        this._registerHitOnTarget(meta.playerId, 18, 'TANK MG', false);
+        this._registerHitOnTarget(meta.playerId, 18, 'TANK MG');
       }
     }
   }
@@ -808,10 +908,8 @@ export class GameEngine {
     const distToCam = pos.distanceTo(this.camera.position);
     this.sound.playExplosion(Math.max(0.15, 1 - distToCam / 95));
 
-    // Only owner/local applies authoritative damage to avoid duplicate explosion hits
     if (!isLocal) return;
 
-    // Damage local player if in blast radius
     if (this.alive && this.inTankId < 0) {
       const d = pos.distanceTo(this.controller.pos);
       if (d < radius) {
@@ -822,7 +920,6 @@ export class GameEngine {
       }
     }
 
-    // Damage tanks in blast radius
     for (const tank of this.tanks.tanks) {
       if (tank.destroyed) continue;
       const d = Math.hypot(tank.x - pos.x, tank.z - pos.z);
@@ -832,7 +929,6 @@ export class GameEngine {
       }
     }
 
-    // Damage bots or remote players
     if (this.mode === 'practice') {
       for (const bot of this.bots.bots) {
         if (!bot.alive || bot.inTankId >= 0) continue;
@@ -850,7 +946,7 @@ export class GameEngine {
           const dmg = Math.round(playerMaxDmg * (1 - d / radius));
           if (dmg > 4) {
             this.ui.flashHitmarker(false);
-            this._registerHitOnTarget(uid, dmg, weaponLabel, false);
+            this._registerHitOnTarget(uid, dmg, weaponLabel);
           }
         }
       }
@@ -873,7 +969,7 @@ export class GameEngine {
       tank.hp = 0;
       tank.destroyed = true;
       tank.destroyedAt = performance.now();
-      const pos = new THREE.Vector3(tank.x, 1.5, tank.z);
+      const pos = new THREE.Vector3(tank.x, tank.y + 1.5, tank.z);
       this.particles.spawnExplosion(pos, 9);
       this.sound.playExplosion(1.0);
 
@@ -889,6 +985,9 @@ export class GameEngine {
         }
       }
       tank.driverId = '';
+      if (this.mode === 'multiplayer') {
+        this.network.syncTankState(tank.id, { hp: 0, driverUid: '' });
+      }
     }
   }
 
@@ -941,6 +1040,15 @@ export class GameEngine {
       this.deaths += 1;
       this.killerName = attackerName || 'Enemy';
       this.respawnAt = performance.now() + 3000;
+      if (this.inTankId >= 0) {
+        const tank = this.tanks.getTankById(this.inTankId);
+        if (tank) {
+          tank.driverId = '';
+          if (this.mode === 'multiplayer') {
+            this.network.syncTankState(tank.id, { driverUid: '' });
+          }
+        }
+      }
       this.inTankId = -1;
       this._updateViewmodelVisibility();
       this.ui.pushKillfeed(this.killerName, weaponLabel, this.localName);
@@ -950,6 +1058,7 @@ export class GameEngine {
         if (killerBot) killerBot.kills += 1;
         this._checkPracticeWinner();
       } else {
+        this._syncLocalState(true);
         this.network.sendEvent({
           type: 'kill',
           killerUid: attackerId,
@@ -987,23 +1096,25 @@ export class GameEngine {
       worldMeshes: this.mapData.worldMeshes,
       spawns: this.mapData.config.spawns,
       tankSystem: this.tanks,
+      terrainHeightFn: this.mapData.terrainHeightFn,
       targets,
-      onBotShoot: (bot, target) => {
+      onBotShoot: (bot, target, cfg) => {
         const dir = new THREE.Vector3().subVectors(target.pos, bot.pos).normalize();
-        dir.x += (Math.random() - 0.5) * 0.08;
-        dir.y += (Math.random() - 0.5) * 0.06;
-        dir.z += (Math.random() - 0.5) * 0.08;
+        dir.x += (Math.random() - 0.5) * cfg.spread;
+        dir.y += (Math.random() - 0.5) * cfg.spread * 0.7;
+        dir.z += (Math.random() - 0.5) * cfg.spread;
         dir.normalize();
+        const muzzle = bot.pos.clone().add(new THREE.Vector3(0, -0.25, 0)).addScaledVector(dir, 0.75);
         const end = bot.pos.clone().addScaledVector(dir, bot.pos.distanceTo(target.pos));
-        this.particles.spawnTracer(bot.pos.clone().add(new THREE.Vector3(0, -0.2, 0)), end);
+        this.particles.spawnTracer(muzzle, end);
         this.sound.playShot('rifle', Math.max(0.12, 1 - bot.pos.distanceTo(this.controller.pos) / 65));
 
-        if (Math.random() < 0.45) {
+        if (Math.random() < cfg.hitChance) {
           if (target.id === this.localId && this.inTankId < 0) {
-            this._applyDamageToLocal(14, bot.name, 'M4 TAC', bot.id);
+            this._applyDamageToLocal(cfg.damage, bot.name, 'M4 TAC', bot.id);
           } else {
             const victimBot = this.bots.bots.find((b) => b.id === target.id);
-            if (victimBot) this._damageBot(victimBot, 18, bot.id, 'M4 TAC');
+            if (victimBot) this._damageBot(victimBot, cfg.damage + 4, bot.id, 'M4 TAC');
           }
         }
       },
@@ -1012,6 +1123,7 @@ export class GameEngine {
         this.grenades.throwGrenade(bot.pos.clone().add(new THREE.Vector3(0, 0.2, 0)), dir, bot.id, true);
       },
       onBotTankFire: (bot, tank) => {
+        this.tanks.triggerBarrelRecoil(tank);
         const { origin, dir } = this.tanks.getCannonMuzzlePose(tank);
         this.tanks.spawnShell(origin, dir, bot.id, true);
         this.sound.playTankCannon(Math.max(0.15, 1 - origin.distanceTo(this.controller.pos) / 85));
@@ -1025,17 +1137,20 @@ export class GameEngine {
         if (nowMs >= c.respawnAt) {
           c.active = true;
           c.mesh.visible = true;
+          c.ring.visible = true;
         }
         continue;
       }
 
       c.mesh.rotation.y += dt * 1.8;
+      c.mesh.position.y = c.baseY + Math.sin(this.elapsedSec * 2.5 + c.id) * 0.12;
       if (this.alive && this.inTankId < 0) {
         const dx = this.controller.pos.x - c.x;
         const dz = this.controller.pos.z - c.z;
         if (dx * dx + dz * dz < 2.2) {
           c.active = false;
           c.mesh.visible = false;
+          c.ring.visible = false;
           c.respawnAt = nowMs + 15000;
           this.hp = Math.min(100, this.hp + 40);
           for (const w of this.inventory) {
@@ -1095,6 +1210,7 @@ export class GameEngine {
         mapId: this.mapId,
         botCount: this.bots.bots.length,
         killLimit: this.killLimit,
+        difficulty: this.botDifficulty,
         playerName: this.localName
       });
     } else if (this.network.isHost) {

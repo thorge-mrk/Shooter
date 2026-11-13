@@ -18,7 +18,7 @@ import {
   onDisconnect,
   serverTimestamp
 } from 'firebase/database';
-import { initFirebase, reinitFirebase } from './config.js';
+import { initFirebase } from './config.js';
 
 function randomRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -29,6 +29,10 @@ function randomRoomCode() {
   return code;
 }
 
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
 export class NetworkManager {
   constructor() {
     this.auth = null;
@@ -36,8 +40,12 @@ export class NetworkManager {
     this.user = null;
     this.roomId = null;
     this.isHost = false;
+    this.playerDisconnectRef = null;
     this.unsubscribers = [];
     this.lastStateSend = 0;
+    this.pingMs = 0;
+    this.pingTimer = null;
+
     this.onAuthChange = null;
     this.onRoomUpdate = null;
     this.onEvent = null;
@@ -69,26 +77,8 @@ export class NetworkManager {
     return true;
   }
 
-  async reloadConfig() {
-    const services = await reinitFirebase();
-    if (!services) {
-      this.auth = null;
-      this.db = null;
-      this.user = null;
-      if (this.onAuthChange) this.onAuthChange(null);
-      return false;
-    }
-    this.auth = services.auth;
-    this.db = services.db;
-    onAuthStateChanged(this.auth, (user) => {
-      this.user = user;
-      if (this.onAuthChange) this.onAuthChange(user);
-    });
-    return true;
-  }
-
   async signInWithGoogle() {
-    if (!this.auth) throw new Error('Firebase is not configured yet.');
+    if (!this.auth) throw new Error('Firebase unavailable.');
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
@@ -119,10 +109,10 @@ export class NetworkManager {
       const val = child.val();
       const playerCount = val.players ? Object.keys(val.players).length : 0;
       const ageMs = now - (val.createdAt || now);
-      if (playerCount > 0 && playerCount < 5 && ageMs < 1000 * 60 * 90) {
+      if (playerCount > 0 && playerCount < 5 && ageMs < 1000 * 60 * 60) {
         rooms.push({
           id: child.key,
-          mapId: val.mapId || 'compound',
+          mapId: val.mapId || 'harbor',
           killLimit: val.killLimit || 15,
           durationSec: val.durationSec || 180,
           status: val.status || 'waiting',
@@ -135,7 +125,7 @@ export class NetworkManager {
   }
 
   async createRoom({ mapId, killLimit, durationSec }) {
-    if (!this.db || !this.user) throw new Error('Sign in with Google first.');
+    if (!this.db || !this.user) throw new Error('Please sign in with Google first.');
     await this.leaveRoom();
 
     const code = randomRoomCode();
@@ -146,9 +136,9 @@ export class NetworkManager {
       durationSec,
       status: 'waiting',
       hostUid: this.user.uid,
-      hostName: this.user.displayName || 'Operator',
+      hostName: (this.user.displayName || 'Operator').slice(0, 18),
       createdAt: Date.now(),
-      roundStartAt: null
+      roundStartAt: 0
     });
 
     await this._joinRoomInternal(code, true);
@@ -156,7 +146,7 @@ export class NetworkManager {
   }
 
   async joinRoom(rawCode) {
-    if (!this.db || !this.user) throw new Error('Sign in with Google first.');
+    if (!this.db || !this.user) throw new Error('Please sign in with Google first.');
     const code = rawCode.trim().toUpperCase();
     if (!code) throw new Error('Enter a room code.');
 
@@ -189,17 +179,19 @@ export class NetworkManager {
       x: 0,
       y: 1.7,
       z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
       yaw: 0,
       pitch: 0,
       weapon: 0,
       inTankId: -1,
-      tankYaw: 0,
-      tankTurretYaw: 0,
       updatedAt: serverTimestamp()
     };
 
     await set(playerRef, initialPlayer);
-    onDisconnect(playerRef).remove();
+    this.playerDisconnectRef = onDisconnect(playerRef);
+    await this.playerDisconnectRef.remove();
 
     const metaUnsub = onValue(ref(this.db, `rooms/${code}`), (snap) => {
       if (!snap.exists()) {
@@ -216,7 +208,7 @@ export class NetworkManager {
       if (this.onPlayersUpdate) this.onPlayersUpdate(players);
     });
 
-    const joinedAt = Date.now() - 1000;
+    const joinedAt = Date.now() - 1200;
     const eventsUnsub = onChildAdded(ref(this.db, `rooms/${code}/events`), (snap) => {
       const ev = snap.val();
       if (!ev || (ev.ts && ev.ts < joinedAt)) return;
@@ -224,16 +216,44 @@ export class NetworkManager {
     });
 
     this.unsubscribers.push(metaUnsub, playersUnsub, eventsUnsub);
+    this._startPingLoop();
+  }
+
+  _startPingLoop() {
+    this._stopPingLoop();
+    const probe = async () => {
+      if (!this.db || !this.roomId || !this.user) return;
+      const t0 = performance.now();
+      try {
+        await set(ref(this.db, `rooms/${this.roomId}/players/${this.user.uid}/pingAt`), Date.now());
+        const rtt = Math.max(1, Math.round(performance.now() - t0));
+        this.pingMs = this.pingMs ? Math.round(this.pingMs * 0.55 + rtt * 0.45) : rtt;
+      } catch {
+        // Ignore transient probe failures
+      }
+    };
+    probe();
+    this.pingTimer = setInterval(probe, 2500);
+  }
+
+  _stopPingLoop() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    this.pingMs = 0;
   }
 
   async startMatch() {
     if (!this.db || !this.roomId || !this.isHost) return;
+    const roundStartAt = Date.now();
     await update(ref(this.db, `rooms/${this.roomId}`), {
       status: 'playing',
-      roundStartAt: Date.now(),
+      roundStartAt,
+      events: null,
       tanks: {
-        0: { hp: 350, driverUid: '', x: -20, z: -18, yaw: 0, turretYaw: 0, destroyedAt: 0 },
-        1: { hp: 350, driverUid: '', x: 20, z: 18, yaw: Math.PI, turretYaw: Math.PI, destroyedAt: 0 }
+        0: { hp: 350, driverUid: '', x: -24, z: 0, yaw: -Math.PI / 2, turretYaw: -Math.PI / 2 },
+        1: { hp: 350, driverUid: '', x: 24, z: 0, yaw: Math.PI / 2, turretYaw: Math.PI / 2 }
       }
     });
   }
@@ -241,10 +261,15 @@ export class NetworkManager {
   async restartRound() {
     if (!this.db || !this.roomId || !this.isHost) return;
     const snap = await get(ref(this.db, `rooms/${this.roomId}/players`));
+    const roundStartAt = Date.now();
     const updates = {
       status: 'playing',
-      roundStartAt: Date.now(),
-      events: null
+      roundStartAt,
+      events: null,
+      tanks: {
+        0: { hp: 350, driverUid: '', x: -24, z: 0, yaw: -Math.PI / 2, turretYaw: -Math.PI / 2 },
+        1: { hp: 350, driverUid: '', x: 24, z: 0, yaw: Math.PI / 2, turretYaw: Math.PI / 2 }
+      }
     };
     if (snap.exists()) {
       snap.forEach((child) => {
@@ -256,24 +281,39 @@ export class NetworkManager {
       });
     }
     await update(ref(this.db, `rooms/${this.roomId}`), updates);
-    await this.sendEvent({ type: 'roundReset' });
+    await this.sendEvent({ type: 'roundReset', roundStartAt });
   }
 
-  syncPlayerState(state) {
+  syncPlayerState(state, force = false) {
     if (!this.db || !this.roomId || !this.user) return;
     const now = performance.now();
-    if (now - this.lastStateSend < 50) return; // 20 Hz cap
+    if (!force && now - this.lastStateSend < 36) return; // ~28 Hz responsive sync
     this.lastStateSend = now;
 
-    update(ref(this.db, `rooms/${this.roomId}/players/${this.user.uid}`), {
+    const payload = {
       ...state,
+      x: round2(state.x),
+      y: round2(state.y),
+      z: round2(state.z),
+      vx: round2(state.vx || 0),
+      vy: round2(state.vy || 0),
+      vz: round2(state.vz || 0),
+      yaw: round2(state.yaw),
+      pitch: round2(state.pitch),
       updatedAt: Date.now()
-    }).catch(() => {});
+    };
+
+    update(ref(this.db, `rooms/${this.roomId}/players/${this.user.uid}`), payload).catch(() => {});
   }
 
   syncTankState(tankId, tankState) {
     if (!this.db || !this.roomId) return;
-    update(ref(this.db, `rooms/${this.roomId}/tanks/${tankId}`), tankState).catch(() => {});
+    const payload = { ...tankState };
+    if (typeof payload.x === 'number') payload.x = round2(payload.x);
+    if (typeof payload.z === 'number') payload.z = round2(payload.z);
+    if (typeof payload.yaw === 'number') payload.yaw = round2(payload.yaw);
+    if (typeof payload.turretYaw === 'number') payload.turretYaw = round2(payload.turretYaw);
+    update(ref(this.db, `rooms/${this.roomId}/tanks/${tankId}`), payload).catch(() => {});
   }
 
   async sendEvent(payload) {
@@ -287,10 +327,16 @@ export class NetworkManager {
   }
 
   async leaveRoom() {
+    this._stopPingLoop();
     for (const unsub of this.unsubscribers) {
       try { unsub(); } catch {}
     }
     this.unsubscribers = [];
+
+    if (this.playerDisconnectRef) {
+      try { await this.playerDisconnectRef.cancel(); } catch {}
+      this.playerDisconnectRef = null;
+    }
 
     if (this.db && this.roomId && this.user) {
       const code = this.roomId;
@@ -304,7 +350,7 @@ export class NetworkManager {
           await remove(ref(this.db, `rooms/${code}`));
         }
       } catch {
-        // Ignore cleanup errors on disconnect
+        // Ignore cleanup errors
       }
     } else {
       this.roomId = null;

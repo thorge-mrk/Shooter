@@ -1,9 +1,52 @@
 import * as THREE from 'three';
-import { buildSoldierMesh } from './SoldierMesh.js';
+import { buildSoldierMesh, animateSoldierModel } from './SoldierMesh.js';
 import { resolveCylinderCollisions } from './Physics.js';
 
 const BOT_NAMES = ['Viper-AI', 'Kestrel-AI', 'Titan-AI', 'Specter-AI'];
-const BOT_COLORS = [0xb91c1c, 0x0f766e, 0x7c2d12, 0x6d28d9];
+const BOT_COLORS = [0x991b1b, 0x0f766e, 0x92400e, 0x4c1d95];
+
+const DIFFICULTY_PRESETS = {
+  casual: {
+    reactionMs: 650,
+    burstIntervalMs: 360,
+    burstSize: 2,
+    burstPauseMs: 950,
+    hitChance: 0.24,
+    damage: 10,
+    spread: 0.13,
+    turnRate: 4.2,
+    moveSpeed: 4.0
+  },
+  tactical: {
+    reactionMs: 420,
+    burstIntervalMs: 260,
+    burstSize: 3,
+    burstPauseMs: 750,
+    hitChance: 0.34,
+    damage: 12,
+    spread: 0.095,
+    turnRate: 5.8,
+    moveSpeed: 4.8
+  },
+  veteran: {
+    reactionMs: 260,
+    burstIntervalMs: 185,
+    burstSize: 4,
+    burstPauseMs: 520,
+    hitChance: 0.48,
+    damage: 15,
+    spread: 0.065,
+    turnRate: 7.5,
+    moveSpeed: 5.6
+  }
+};
+
+function lerpAngle(current, target, alpha) {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return current + diff * alpha;
+}
 
 export class BotManager {
   constructor(scene, castShadows = true) {
@@ -11,23 +54,25 @@ export class BotManager {
     this.castShadows = castShadows;
     this.bots = [];
     this.raycaster = new THREE.Raycaster();
+    this.difficulty = 'tactical';
   }
 
-  spawnBots(count, spawns) {
+  spawnBots(count, spawns, difficulty = 'tactical') {
     this.clear();
+    this.difficulty = difficulty;
     for (let i = 0; i < count; i++) {
       const sp = spawns[(i + 1) % spawns.length];
       const id = `bot_${i}`;
       const name = BOT_NAMES[i % BOT_NAMES.length];
       const model = buildSoldierMesh(id, name, BOT_COLORS[i % BOT_COLORS.length], this.castShadows);
-      model.root.position.set(sp.x, 0, sp.z);
+      model.root.position.set(sp.x, (sp.y || 1.7) - 1.7, sp.z);
       this.scene.add(model.root);
 
       this.bots.push({
         id,
         name,
         model,
-        pos: new THREE.Vector3(sp.x, sp.y, sp.z),
+        pos: new THREE.Vector3(sp.x, sp.y || 1.7, sp.z),
         velY: 0,
         yaw: sp.yaw || 0,
         pitch: 0,
@@ -37,8 +82,12 @@ export class BotManager {
         kills: 0,
         deaths: 0,
         inTankId: -1,
-        roamTarget: new THREE.Vector3((Math.random() - 0.5) * 60, 1.7, (Math.random() - 0.5) * 60),
+        roamTarget: new THREE.Vector3((Math.random() - 0.5) * 60, sp.y || 1.7, (Math.random() - 0.5) * 60),
         retargetAt: 0,
+        acquiredTargetId: '',
+        acquiredAt: 0,
+        burstRemaining: 0,
+        nextBurstAt: 0,
         lastShotAt: 0,
         lastGrenadeAt: 0,
         strafeDir: Math.random() < 0.5 ? 1 : -1
@@ -56,33 +105,43 @@ export class BotManager {
     return out;
   }
 
-  update(dt, nowMs, { colliders, worldMeshes, spawns, tankSystem, targets, onBotShoot, onBotGrenade, onBotTankFire }) {
+  update(dt, nowMs, { colliders, worldMeshes, spawns, tankSystem, terrainHeightFn, targets, onBotShoot, onBotGrenade, onBotTankFire }) {
+    const cfg = DIFFICULTY_PRESETS[this.difficulty] || DIFFICULTY_PRESETS.tactical;
+
     for (const bot of this.bots) {
       if (!bot.alive) {
         bot.model.root.visible = false;
         if (nowMs >= bot.respawnAt) {
           const sp = spawns[Math.floor(Math.random() * spawns.length)];
-          bot.pos.set(sp.x + (Math.random() - 0.5) * 2, sp.y, sp.z + (Math.random() - 0.5) * 2);
+          const sx = sp.x + (Math.random() - 0.5) * 2;
+          const sz = sp.z + (Math.random() - 0.5) * 2;
+          const sy = (terrainHeightFn ? terrainHeightFn(sx, sz) : 0) + 1.7;
+          bot.pos.set(sx, sy, sz);
           bot.hp = 100;
           bot.alive = true;
           bot.inTankId = -1;
+          bot.acquiredTargetId = '';
         }
         continue;
       }
 
-      // Acquire closest alive target (player or other bot)
+      // Find closest visible or nearby target
       let bestTarget = null;
       let bestDist = Infinity;
+      let bestLOS = false;
+
       for (const t of targets) {
         if (!t.alive || t.id === bot.id) continue;
         const d = bot.pos.distanceTo(t.pos);
-        if (d < bestDist) {
-          bestDist = d;
+        const los = d < 65 && this._hasLineOfSight(bot.pos, t.pos, worldMeshes);
+        const scoreDist = los ? d * 0.55 : d;
+        if (scoreDist < bestDist) {
+          bestDist = scoreDist;
           bestTarget = t;
+          bestLOS = los;
         }
       }
 
-      // If driving a tank
       if (bot.inTankId >= 0) {
         bot.model.root.visible = false;
         const tank = tankSystem.getTankById(bot.inTankId);
@@ -91,7 +150,7 @@ export class BotManager {
           continue;
         }
 
-        let fwd = 0.6;
+        let fwd = 0.55;
         let turn = 0;
         let aimYaw = tank.turretYaw;
         let aimPitch = 0;
@@ -107,95 +166,125 @@ export class BotManager {
           while (hullDiff > Math.PI) hullDiff -= Math.PI * 2;
           while (hullDiff < -Math.PI) hullDiff += Math.PI * 2;
           turn = Math.max(-1, Math.min(1, hullDiff * 1.4));
-          fwd = dist > 20 ? 0.85 : dist < 10 ? -0.4 : 0.2;
+          fwd = dist > 22 ? 0.8 : dist < 11 ? -0.35 : 0.2;
 
-          if (nowMs - bot.lastShotAt > 2600 && this._hasLineOfSight(new THREE.Vector3(tank.x, 2.2, tank.z), bestTarget.pos, worldMeshes)) {
+          if (bestLOS && nowMs - bot.lastShotAt > 3100) {
             bot.lastShotAt = nowMs;
             onBotTankFire(bot, tank);
           }
         }
 
-        tankSystem.driveTank(tank, fwd, turn, aimYaw, aimPitch, colliders, dt);
-        bot.pos.set(tank.x, 2.0, tank.z);
+        tankSystem.driveTank(tank, fwd, turn, aimYaw, aimPitch, colliders, dt, terrainHeightFn);
+        bot.pos.set(tank.x, tank.y + 2.0, tank.z);
         continue;
       }
 
       bot.model.root.visible = true;
 
-      // Check if an empty tank is nearby to board
-      const nearTank = tankSystem.findNearestEnterableTank(bot.pos, 6.0);
-      if (nearTank && Math.random() < 0.015) {
+      // Occasional tank boarding when near empty tank
+      const nearTank = tankSystem.findNearestEnterableTank(bot.pos, 5.5);
+      if (nearTank && Math.random() < 0.008) {
         nearTank.driverId = bot.id;
         bot.inTankId = nearTank.id;
         continue;
       }
 
-      const hasLOS = bestTarget ? this._hasLineOfSight(bot.pos, bestTarget.pos, worldMeshes) : false;
+      let moveSpeed = 0;
+      const prevX = bot.pos.x;
+      const prevZ = bot.pos.z;
 
-      if (bestTarget && hasLOS) {
+      if (bestTarget && bestLOS) {
         const dx = bestTarget.pos.x - bot.pos.x;
         const dy = bestTarget.pos.y - bot.pos.y;
         const dz = bestTarget.pos.z - bot.pos.z;
         const horiz = Math.hypot(dx, dz);
+        const realDist = Math.hypot(dx, dy, dz);
 
-        bot.yaw = Math.atan2(-dx, -dz);
-        bot.pitch = Math.max(-0.5, Math.min(0.5, Math.atan2(dy, horiz)));
+        const desiredYaw = Math.atan2(-dx, -dz);
+        const desiredPitch = Math.max(-0.55, Math.min(0.55, Math.atan2(dy, horiz)));
 
-        // Strafe & engage
+        // Smooth human turning instead of instant 180 snap
+        bot.yaw = lerpAngle(bot.yaw, desiredYaw, Math.min(1, cfg.turnRate * dt));
+        bot.pitch += (desiredPitch - bot.pitch) * Math.min(1, cfg.turnRate * dt);
+
+        // Reaction timer before opening fire
+        if (bot.acquiredTargetId !== bestTarget.id) {
+          bot.acquiredTargetId = bestTarget.id;
+          bot.acquiredAt = nowMs + cfg.reactionMs + Math.random() * 180;
+          bot.burstRemaining = cfg.burstSize;
+          bot.nextBurstAt = bot.acquiredAt;
+        }
+
+        // Strafe & keep comfortable combat distance
         if (nowMs > bot.retargetAt) {
           bot.strafeDir = Math.random() < 0.5 ? 1 : -1;
-          bot.retargetAt = nowMs + 900 + Math.random() * 900;
+          bot.retargetAt = nowMs + 950 + Math.random() * 950;
         }
         const rightX = Math.cos(bot.yaw);
         const rightZ = -Math.sin(bot.yaw);
-        const moveSpeed = 4.6;
-        bot.pos.x += rightX * bot.strafeDir * moveSpeed * dt;
-        bot.pos.z += rightZ * bot.strafeDir * moveSpeed * dt;
+        const fwdX = -Math.sin(bot.yaw);
+        const fwdZ = -Math.cos(bot.yaw);
+        const approach = realDist > 22 ? 0.55 : realDist < 8 ? -0.45 : 0;
 
-        // Shoot with fair AI reaction cadence
-        if (nowMs - bot.lastShotAt > 480 + Math.random() * 240) {
-          bot.lastShotAt = nowMs;
-          onBotShoot(bot, bestTarget);
+        bot.pos.x += (rightX * bot.strafeDir + fwdX * approach) * cfg.moveSpeed * dt;
+        bot.pos.z += (rightZ * bot.strafeDir + fwdZ * approach) * cfg.moveSpeed * dt;
+
+        // Burst-fire cadence
+        let aimError = desiredYaw - bot.yaw;
+        while (aimError > Math.PI) aimError -= Math.PI * 2;
+        while (aimError < -Math.PI) aimError += Math.PI * 2;
+
+        if (nowMs >= bot.acquiredAt && Math.abs(aimError) < 0.45) {
+          if (bot.burstRemaining > 0 && nowMs - bot.lastShotAt >= cfg.burstIntervalMs) {
+            bot.lastShotAt = nowMs;
+            bot.burstRemaining -= 1;
+            bot.model.flashTimer = 0.065;
+            onBotShoot(bot, bestTarget, cfg);
+            if (bot.burstRemaining === 0) {
+              bot.nextBurstAt = nowMs + cfg.burstPauseMs + Math.random() * 350;
+            }
+          } else if (bot.burstRemaining === 0 && nowMs >= bot.nextBurstAt) {
+            bot.burstRemaining = cfg.burstSize;
+          }
         }
 
-        // Occasional grenade throw if target > 12m away
-        if (bestDist > 12 && bestDist < 28 && nowMs - bot.lastGrenadeAt > 9500) {
+        if (realDist > 13 && realDist < 28 && nowMs - bot.lastGrenadeAt > 11000) {
           bot.lastGrenadeAt = nowMs;
           onBotGrenade(bot, bestTarget);
         }
       } else {
-        // Roam toward waypoint or target
-        if (nowMs > bot.retargetAt || bot.pos.distanceTo(bot.roamTarget) < 2.5) {
+        bot.acquiredTargetId = '';
+        if (nowMs > bot.retargetAt || Math.hypot(bot.roamTarget.x - bot.pos.x, bot.roamTarget.z - bot.pos.z) < 2.5) {
           if (bestTarget && Math.random() < 0.65) {
             bot.roamTarget.copy(bestTarget.pos);
           } else {
             bot.roamTarget.set((Math.random() - 0.5) * 68, 1.7, (Math.random() - 0.5) * 68);
           }
-          bot.retargetAt = nowMs + 2200 + Math.random() * 1500;
+          bot.retargetAt = nowMs + 2200 + Math.random() * 1400;
         }
         const dx = bot.roamTarget.x - bot.pos.x;
         const dz = bot.roamTarget.z - bot.pos.z;
         const len = Math.hypot(dx, dz) || 1;
-        bot.yaw = Math.atan2(-dx, -dz);
-        bot.pitch = 0;
-        const roamSpeed = 5.6;
+        const desiredYaw = Math.atan2(-dx, -dz);
+        bot.yaw = lerpAngle(bot.yaw, desiredYaw, Math.min(1, cfg.turnRate * dt));
+        bot.pitch += (0 - bot.pitch) * Math.min(1, 6 * dt);
+        const roamSpeed = cfg.moveSpeed * 1.12;
         bot.pos.x += (dx / len) * roamSpeed * dt;
         bot.pos.z += (dz / len) * roamSpeed * dt;
       }
 
-      // Gravity & AABB collision
       bot.velY -= 22 * dt;
       bot.pos.y += bot.velY * dt;
-      const floorY = resolveCylinderCollisions(bot.pos, 0.42, 1.7, colliders, 0);
+      const floorY = resolveCylinderCollisions(bot.pos, 0.42, 1.7, colliders, terrainHeightFn || 0);
       if (bot.pos.y - 1.7 <= floorY) {
         bot.pos.y = floorY + 1.7;
         bot.velY = 0;
       }
 
+      moveSpeed = dt > 0.0001 ? Math.hypot(bot.pos.x - prevX, bot.pos.z - prevZ) / dt : 0;
       bot.model.root.position.set(bot.pos.x, bot.pos.y - 1.7, bot.pos.z);
       bot.model.root.rotation.y = bot.yaw;
-      bot.model.armPivot.rotation.x = bot.pitch;
-      bot.model.headGroup.rotation.x = bot.pitch * 0.6;
+      animateSoldierModel(bot.model, dt, moveSpeed, bot.pitch, moveSpeed > 0.35);
     }
   }
 

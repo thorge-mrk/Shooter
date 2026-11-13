@@ -2,7 +2,15 @@ import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
-const STORAGE_KEY = 'apex_armor_fb_config';
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyA4AVla69BMqDtiUI6zDTjSbjPN1iCNTdo',
+  authDomain: 'project-coldbore.firebaseapp.com',
+  databaseURL: 'https://project-coldbore-default-rtdb.europe-west1.firebasedatabase.app',
+  projectId: 'project-coldbore',
+  storageBucket: 'project-coldbore.firebasestorage.app',
+  messagingSenderId: '570139998565',
+  appId: '1:570139998565:web:6866fffea308dd41e9898c'
+};
 
 function readEnvConfig() {
   const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
@@ -20,52 +28,12 @@ function readEnvConfig() {
   };
 }
 
-export function getSavedFirebaseConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.apiKey && parsed.databaseURL) {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 export function getFirebaseConfig() {
-  return getSavedFirebaseConfig() || readEnvConfig();
+  return readEnvConfig() || DEFAULT_FIREBASE_CONFIG;
 }
 
 export function isFirebaseConfigured() {
   return Boolean(getFirebaseConfig());
-}
-
-export function saveCustomFirebaseConfig(rawText) {
-  // Accept either strict JSON or JS object snippet pasted from Firebase console
-  let parsed;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    const jsonified = rawText
-      .replace(/const\s+\w+\s*=\s*/, '')
-      .replace(/;\s*$/, '')
-      .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
-      .replace(/'/g, '"');
-    parsed = JSON.parse(jsonified);
-  }
-
-  if (!parsed || !parsed.apiKey || !parsed.authDomain || !parsed.databaseURL || !parsed.projectId) {
-    throw new Error('Config must include apiKey, authDomain, databaseURL, and projectId.');
-  }
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-  return parsed;
-}
-
-export function clearCustomFirebaseConfig() {
-  localStorage.removeItem(STORAGE_KEY);
 }
 
 let cachedServices = null;
@@ -76,7 +44,6 @@ export async function initFirebase() {
     cachedServices = null;
     return null;
   }
-
   if (cachedServices) {
     return cachedServices;
   }
@@ -90,9 +57,4 @@ export async function initFirebase() {
   const db = getDatabase(app);
   cachedServices = { app, auth, db, config };
   return cachedServices;
-}
-
-export async function reinitFirebase() {
-  cachedServices = null;
-  return initFirebase();
 }

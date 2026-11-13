@@ -5,11 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>APEX ARMOR // Tactical FPS & Tank Arena</title>
+  <title>PROJECT COLDBORE</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <!-- WebGL Canvas Container -->
   <div id="game-container"></div>
 
   <!-- Sniper Scope Overlay -->
@@ -17,44 +16,35 @@
     <div class="scope-vignette"></div>
     <div class="scope-crosshair-h"></div>
     <div class="scope-crosshair-v"></div>
-    <div class="scope-mil-dots"></div>
+    <div class="scope-center-dot"></div>
   </div>
 
-  <!-- Damage Vignette & Hit Flash -->
   <div id="damage-vignette"></div>
 
   <!-- In-Game HUD -->
   <div id="hud" class="hidden">
-    <!-- Top Bar: Match Timer, Score Leader, FPS, Settings -->
     <div class="hud-top">
       <div class="hud-top-left">
-        <div class="fps-pill" id="fps-badge">60 FPS</div>
-        <div class="mode-pill" id="input-mode-badge">DESKTOP</div>
+        <span class="hud-input-tag" id="input-mode-badge">MOUSE + KB</span>
       </div>
 
-      <div class="hud-match-box">
-        <div class="match-timer" id="hud-timer">03:00</div>
-        <div class="match-meta">
-          <span id="hud-goal">FIRST TO 15</span>
-          <span class="dot">•</span>
-          <span id="hud-players-count">1/5</span>
-        </div>
+      <div class="hud-match-strip">
+        <span class="match-timer" id="hud-timer">03:00</span>
+        <span class="strip-sep">|</span>
+        <span class="match-goal" id="hud-goal">FIRST TO 15</span>
+        <span class="strip-sep">|</span>
+        <span class="match-players" id="hud-players-count">1/5</span>
       </div>
 
       <div class="hud-top-right">
-        <button class="hud-icon-btn" id="btn-scoreboard" title="Scoreboard (Tab)">
-          <span>SCORE</span>
-        </button>
-        <button class="hud-icon-btn" id="btn-pause" title="Menu / Settings (Esc)">
-          <span>MENU</span>
-        </button>
+        <span class="hud-telemetry" id="hud-telemetry">60 FPS · 1 ms</span>
+        <button class="hud-btn" id="btn-scoreboard" title="Scoreboard (Tab)">SCORE</button>
+        <button class="hud-btn" id="btn-pause" title="Menu (Esc)">MENU</button>
       </div>
     </div>
 
-    <!-- Killfeed -->
     <div id="killfeed" class="killfeed"></div>
 
-    <!-- Center Crosshair & Prompts -->
     <div id="crosshair" class="crosshair">
       <div class="ch-line ch-top"></div>
       <div class="ch-line ch-bottom"></div>
@@ -80,16 +70,15 @@
       <div class="elim-sub" id="elim-sub">Killed by Enemy • Respawning in 3s</div>
     </div>
 
-    <!-- Click-to-lock pointer hint on desktop -->
     <div id="pointer-lock-hint" class="pointer-lock-hint hidden">
-      Click anywhere on screen to lock mouse &amp; aim
+      Click viewport to lock cursor and aim
     </div>
 
-    <!-- Bottom Left: Health, Armor / Tank Status -->
+    <!-- Bottom Left: Health & Tank Armor -->
     <div class="hud-bottom-left">
-      <div class="status-card" id="player-status-card">
+      <div class="hud-panel" id="player-status-card">
         <div class="status-row">
-          <span class="status-label">HP</span>
+          <span class="status-label">HEALTH</span>
           <span class="status-value" id="hud-hp">100</span>
         </div>
         <div class="bar-track">
@@ -97,9 +86,9 @@
         </div>
       </div>
 
-      <div class="status-card tank-card hidden" id="tank-status-card">
+      <div class="hud-panel tank-card hidden" id="tank-status-card">
         <div class="status-row">
-          <span class="status-label">TANK ARMOR</span>
+          <span class="status-label">ARMOR</span>
           <span class="status-value" id="hud-tank-hp">350</span>
         </div>
         <div class="bar-track">
@@ -107,13 +96,13 @@
         </div>
         <div class="tank-subrow">
           <span id="hud-cannon-ready">CANNON READY</span>
-          <span>•</span>
+          <span>·</span>
           <span id="hud-coax-ammo">MG 60/60</span>
         </div>
       </div>
     </div>
 
-    <!-- Bottom Right: Weapon, Ammo, Grenades, Loadout Strip -->
+    <!-- Bottom Right: Loadout & Ammo -->
     <div class="hud-bottom-right">
       <div class="weapon-strip" id="weapon-strip">
         <button class="weapon-slot active" data-slot="0">
@@ -138,48 +127,45 @@
         </button>
       </div>
 
-      <div class="ammo-card" id="ammo-card">
+      <div class="ammo-panel" id="ammo-card">
         <div class="ammo-weapon-name" id="hud-weapon-name">M4A1 TACTICAL</div>
         <div class="ammo-numbers">
           <span class="ammo-mag" id="hud-ammo-mag">30</span>
           <span class="ammo-sep">/</span>
           <span class="ammo-res" id="hud-ammo-res">120</span>
         </div>
-        <div class="reload-hint hidden" id="hud-reloading">RELOADING...</div>
+        <div class="reload-hint hidden" id="hud-reloading">RELOADING</div>
       </div>
     </div>
 
-    <!-- Touch Controls Overlay (Smartly shown based on input detection / override) -->
+    <!-- Touch Controls (Auto-managed for iPad & Hybrid KB+Touch) -->
     <div id="touch-controls" class="touch-controls hidden">
-      <!-- Left Movement Stick (Hidden in iPad Keyboard + Touch mode) -->
       <div id="touch-move-zone" class="touch-move-zone">
         <div class="joystick-base" id="joystick-base">
           <div class="joystick-knob" id="joystick-knob"></div>
         </div>
       </div>
 
-      <!-- Right Aim Zone -->
       <div id="touch-aim-zone" class="touch-aim-zone"></div>
 
-      <!-- Right Action Buttons -->
       <div class="touch-actions">
         <button class="t-btn t-fire" id="t-btn-fire">FIRE</button>
         <button class="t-btn t-ads" id="t-btn-ads">ADS</button>
         <button class="t-btn t-jump" id="t-btn-jump">JUMP</button>
-        <button class="t-btn t-reload" id="t-btn-reload">RELOAD</button>
+        <button class="t-btn t-reload" id="t-btn-reload">R</button>
         <button class="t-btn t-grenade" id="t-btn-grenade">FRAG</button>
         <button class="t-btn t-tank hidden" id="t-btn-tank">TANK</button>
       </div>
     </div>
   </div>
 
-  <!-- Scoreboard Overlay (Hold Tab or Toggle) -->
+  <!-- Scoreboard Overlay -->
   <div id="scoreboard-overlay" class="modal-backdrop hidden">
-    <div class="glass-panel scoreboard-panel">
+    <div class="panel scoreboard-panel">
       <div class="panel-header">
         <div>
-          <h2 id="sb-title">MATCH SCOREBOARD</h2>
-          <p class="panel-sub" id="sb-subtitle">Sunlit Compound • Free-For-All</p>
+          <h2 id="sb-title">SCOREBOARD</h2>
+          <p class="panel-sub" id="sb-subtitle">Sunlit Cargo Harbor • Free-For-All</p>
         </div>
         <button class="close-btn hidden" id="btn-close-sb">&times;</button>
       </div>
@@ -205,65 +191,69 @@
     </div>
   </div>
 
-  <!-- Main Menu / Lobby Overlay -->
+  <!-- Main Menu / Lobby -->
   <div id="menu-overlay" class="menu-overlay">
     <div class="menu-shell">
-      <header class="menu-brand">
-        <div class="brand-badge">THREE.JS • FIREBASE • 60 FPS</div>
-        <h1>APEX <span>ARMOR</span></h1>
-        <p>Tactical 2–5 Player Free-For-All Shooter &amp; Tank Warfare</p>
+      <header class="menu-header">
+        <h1>PROJECT COLDBORE</h1>
+        <p class="menu-sub">2–5 Player Tactical FPS &amp; Armored Arena</p>
       </header>
 
       <div class="menu-grid">
-        <!-- Left Card: Account & Quick Play -->
-        <section class="glass-panel menu-card">
+        <!-- Left Column: Account & Solo Practice -->
+        <section class="panel menu-card">
           <div class="card-head">
-            <h3>OPERATOR PROFILE</h3>
-            <span class="status-dot" id="firebase-status-pill">OFFLINE PRACTICE READY</span>
+            <h2>SOLO DEPLOYMENT</h2>
+            <span class="conn-label" id="firebase-status-pill">ONLINE</span>
           </div>
 
-          <!-- Auth Box -->
           <div class="auth-box" id="auth-box">
             <div class="user-profile hidden" id="user-profile">
               <img id="user-avatar" src="" alt="" />
               <div class="user-meta">
                 <div class="user-name" id="user-name">Operator</div>
-                <div class="user-email" id="user-email">Signed in with Google</div>
+                <div class="user-email" id="user-email">Google Account</div>
               </div>
               <button class="btn-ghost" id="btn-signout">Sign Out</button>
             </div>
 
             <div class="signin-prompt" id="signin-prompt">
               <button class="btn-google" id="btn-google-login">
-                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M23.7 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.6c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.6-5.2 3.6-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.2c-.2-.7-.4-1.5-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c1-2.9 3.7-5 6.8-5z"/></svg>
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="#4285F4" d="M23.7 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.6c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.6-5.2 3.6-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.2c-.2-.7-.4-1.5-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c1-2.9 3.7-5 6.8-5z"/></svg>
                 <span>Sign in with Google</span>
               </button>
-              <button class="btn-ghost" id="btn-open-fb-config">Configure Firebase Keys</button>
             </div>
           </div>
 
-          <!-- Offline Bot Practice -->
-          <div class="divider"><span>INSTANT SOLO PRACTICE</span></div>
+          <div class="section-sep">PRACTICE VS AI</div>
           <div class="form-row">
-            <label>Map</label>
+            <label for="practice-map">Arena</label>
             <select id="practice-map">
-              <option value="compound">Sunlit Military Compound (Primary)</option>
-              <option value="cargoyard">Industrial Cargo Yard</option>
-              <option value="nightops">Alpine Night Ops Outpost</option>
+              <option value="harbor">Sunlit Cargo Harbor (Sunset Port)</option>
+              <option value="desert">Desert Dunes &amp; Outpost (Hills)</option>
+              <option value="snow">Alpine Snow Peaks (Snowfall)</option>
             </select>
           </div>
-          <div class="form-row two-col">
+          <div class="form-row three-col">
             <div>
-              <label>AI Bots (1v1 to 5p)</label>
+              <label for="practice-bots">Opponents</label>
               <select id="practice-bots">
-                <option value="1">1 Bot (1v1)</option>
-                <option value="2">2 Bots (3p)</option>
-                <option value="3" selected>3 Bots (4p)</option>
-                <option value="4">4 Bots (5p)</option>
+                <option value="1">1v1 (1 Bot)</option>
+                <option value="2">3P (2 Bots)</option>
+                <option value="3" selected>4P (3 Bots)</option>
+                <option value="4">5P (4 Bots)</option>
               </select>
             </div>
             <div>
-              <label>Target Kills</label>
+              <label for="practice-difficulty">Bot Skill</label>
+              <select id="practice-difficulty">
+                <option value="casual">Casual</option>
+                <option value="tactical" selected>Tactical</option>
+                <option value="veteran">Veteran</option>
+              </select>
+            </div>
+            <div>
+              <label for="practice-kills">Kill Limit</label>
               <select id="practice-kills">
                 <option value="10">10 Kills</option>
                 <option value="15" selected>15 Kills</option>
@@ -271,150 +261,117 @@
               </select>
             </div>
           </div>
-          <button class="btn-primary full-width" id="btn-start-practice">
-            DEPLOY SOLO VS BOTS
-          </button>
+          <button class="btn-primary full-width" id="btn-start-practice">PLAY PRACTICE</button>
         </section>
 
-        <!-- Right Card: Multiplayer Rooms -->
-        <section class="glass-panel menu-card">
+        <!-- Right Column: Multiplayer -->
+        <section class="panel menu-card">
           <div class="card-head">
-            <h3>MULTIPLAYER LOBBY (2–5 PLAYERS)</h3>
+            <h2>MULTIPLAYER LOBBY (2–5)</h2>
             <button class="btn-ghost" id="btn-refresh-rooms">Refresh</button>
           </div>
 
           <div class="create-room-box">
             <div class="form-row two-col">
               <div>
-                <label>Arena Map</label>
+                <label for="mp-map">Arena</label>
                 <select id="mp-map">
-                  <option value="compound">Sunlit Compound</option>
-                  <option value="cargoyard">Cargo Yard</option>
-                  <option value="nightops">Night Ops Outpost</option>
+                  <option value="harbor">Sunlit Cargo Harbor</option>
+                  <option value="desert">Desert Dunes &amp; Outpost</option>
+                  <option value="snow">Alpine Snow Peaks</option>
                 </select>
               </div>
               <div>
-                <label>Kill Limit / Time</label>
+                <label for="mp-rules">Match Rules</label>
                 <select id="mp-rules">
-                  <option value="15-180" selected>15 Kills / 3 Min</option>
-                  <option value="10-120">10 Kills / 2 Min</option>
-                  <option value="20-300">20 Kills / 5 Min</option>
+                  <option value="15-180" selected>15 Kills · 3 Min</option>
+                  <option value="10-120">10 Kills · 2 Min</option>
+                  <option value="20-300">20 Kills · 5 Min</option>
                 </select>
               </div>
             </div>
             <div class="join-code-row">
               <button class="btn-accent" id="btn-create-room">CREATE ROOM</button>
-              <input type="text" id="input-room-code" placeholder="ROOM CODE" maxlength="6" />
+              <input type="text" id="input-room-code" placeholder="CODE" maxlength="6" />
               <button class="btn-secondary" id="btn-join-code">JOIN</button>
             </div>
           </div>
 
+          <div id="mp-feedback" class="mp-feedback hidden"></div>
+
           <div class="room-list" id="room-list">
-            <div class="room-empty">Sign in with Google to create or join live 2–5 player rooms.</div>
+            <div class="room-empty">Sign in with Google to create or join a 2–5 player room.</div>
           </div>
 
-          <!-- Active Waiting Room -->
           <div class="waiting-room hidden" id="waiting-room">
             <div class="waiting-header">
               <div>
                 <div class="room-code-tag">ROOM <span id="wr-code">-----</span></div>
-                <div class="wr-meta" id="wr-meta">Sunlit Compound • 15 Kills</div>
+                <div class="wr-meta" id="wr-meta">Sunlit Cargo Harbor • First to 15</div>
               </div>
               <button class="btn-ghost" id="btn-leave-room">Leave</button>
             </div>
             <div class="wr-players" id="wr-players"></div>
-            <button class="btn-primary full-width hidden" id="btn-start-mp-match">
-              START MATCH
-            </button>
-            <div class="wr-wait-note" id="wr-wait-note">Waiting for host to start (2–5 players recommended)...</div>
+            <button class="btn-primary full-width hidden" id="btn-start-mp-match">START MATCH</button>
+            <div class="wr-wait-note" id="wr-wait-note">Waiting for host to start match...</div>
           </div>
         </section>
       </div>
 
       <footer class="menu-footer">
-        <button class="btn-ghost" id="btn-open-settings">Graphics, Sensitivity &amp; Controls</button>
-        <span class="controls-summary">
-          WASD Move • Mouse/Touch Aim • 1-4 Weapons • G Frag • E Enter/Exit Tank • R Reload • Tab Score
-        </span>
+        <button class="btn-ghost" id="btn-open-settings">Settings &amp; Controls</button>
+        <span class="controls-summary">WASD Move · Mouse/Touch Aim · 1–4 Weapons · G Frag · E Tank · R Reload · Tab Score</span>
       </footer>
     </div>
   </div>
 
-  <!-- Pause / In-Match Settings Modal -->
+  <!-- Settings Modal -->
   <div id="settings-modal" class="modal-backdrop hidden">
-    <div class="glass-panel modal-panel">
+    <div class="panel modal-panel">
       <div class="panel-header">
-        <h2>SETTINGS &amp; PERFORMANCE</h2>
+        <h2>SETTINGS</h2>
         <button class="close-btn" id="btn-close-settings">&times;</button>
       </div>
 
       <div class="settings-body">
         <div class="form-row">
-          <label>Graphics Preset (iPad FPS Tuning)</label>
+          <label for="setting-quality">Graphics Preset</label>
           <select id="setting-quality">
-            <option value="high">High (Sharp Shadows + Full DPR)</option>
-            <option value="balanced" selected>Balanced (iPad 60 FPS Recommended)</option>
-            <option value="fast">Fast (Ultra-Light for Older Devices)</option>
+            <option value="high">High (Full Resolution + Sharp Shadows)</option>
+            <option value="balanced" selected>Balanced (60 FPS Recommended)</option>
+            <option value="fast">Fast (Maximum Frame Rate)</option>
           </select>
         </div>
 
         <div class="form-row toggle-row">
-          <label for="setting-autofps">Auto FPS Scaler (keeps 30–60 FPS smooth)</label>
+          <label for="setting-autofps">Auto Resolution Scaling (Target 30–60 FPS)</label>
           <input type="checkbox" id="setting-autofps" checked />
         </div>
 
         <div class="form-row">
-          <label>Control Mode (Venge.io Smart Detection)</label>
+          <label for="setting-input-mode">Input Mode</label>
           <select id="setting-input-mode">
-            <option value="auto" selected>Auto (Mouse=No Touch, iPad Keyboard=Touch Aim, Touch=Dual Stick)</option>
+            <option value="auto" selected>Auto (Mouse = No Touch, iPad KB = Touch Aim, Touch = Dual Stick)</option>
             <option value="desktop">Desktop (Keyboard + Mouse Only)</option>
-            <option value="hybrid">iPad Keyboard + Display Aim/Shoot</option>
-            <option value="touch">Touchscreen Only (Dual Virtual Sticks)</option>
+            <option value="hybrid">iPad Keyboard + Touch Aim/Fire</option>
+            <option value="touch">Touchscreen Only</option>
           </select>
         </div>
 
         <div class="form-row">
-          <label>Aim Sensitivity: <span id="sens-val">1.0</span>x</label>
+          <label for="setting-sensitivity">Aim Sensitivity: <span id="sens-val">1.0</span>x</label>
           <input type="range" id="setting-sensitivity" min="0.3" max="2.5" step="0.1" value="1.0" />
         </div>
 
         <div class="form-row toggle-row">
-          <label for="setting-sound">Sound Effects (Web Audio)</label>
+          <label for="setting-sound">Audio Effects</label>
           <input type="checkbox" id="setting-sound" checked />
         </div>
       </div>
 
       <div class="btn-row">
-        <button class="btn-primary" id="btn-resume-game">RESUME / APPLY</button>
-        <button class="btn-danger hidden" id="btn-quit-match">QUIT TO MENU</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Firebase Config Modal -->
-  <div id="firebase-modal" class="modal-backdrop hidden">
-    <div class="glass-panel modal-panel">
-      <div class="panel-header">
-        <h2>FIREBASE PROJECT CONFIG</h2>
-        <button class="close-btn" id="btn-close-fb">&times;</button>
-      </div>
-      <p class="modal-desc">
-        Paste your Firebase Web App config JSON (from Firebase Console → Project Settings → Your Apps).
-        Enable <strong>Authentication → Google</strong> and <strong>Realtime Database</strong> in your Firebase project.
-      </p>
-      <textarea id="fb-config-input" rows="8" placeholder='{
-  "apiKey": "...",
-  "authDomain": "...",
-  "databaseURL": "https://your-project-default-rtdb.firebaseio.com",
-  "projectId": "...",
-  "storageBucket": "...",
-  "messagingSenderId": "...",
-  "appId": "..."
-}'></textarea>
-      <div id="fb-config-error" class="error-text hidden"></div>
-      <div class="btn-row">
-        <button class="btn-primary" id="btn-save-fb-config">SAVE &amp; CONNECT</button>
-        <button class="btn-ghost" id="btn-clear-fb-config">CLEAR SAVED</button>
+        <button class="btn-primary" id="btn-resume-game">APPLY &amp; RESUME</button>
+        <button class="btn-danger hidden" id="btn-quit-match">LEAVE MATCH</button>
       </div>
     </div>
   </div>

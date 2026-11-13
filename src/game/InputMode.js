@@ -2,6 +2,7 @@ export function resolveEffectiveInputMode({
   overrideMode = 'auto',
   hasTouch = false,
   pointerLocked = false,
+  keysHeldCount = 0,
   lastKeyboardAt = 0,
   lastMouseAt = 0,
   lastTouchAt = 0,
@@ -15,12 +16,12 @@ export function resolveEffectiveInputMode({
     return 'desktop';
   }
 
-  const recentMouse = lastMouseAt > 0 && now - lastMouseAt < 12000 && lastMouseAt > lastTouchAt;
+  const recentMouse = lastMouseAt > 0 && now - lastMouseAt < 12000 && lastMouseAt > lastTouchAt + 1200;
   if (!hasTouch || recentMouse) {
     return 'desktop';
   }
 
-  const recentKeyboard = lastKeyboardAt > 0 && now - lastKeyboardAt < 25000;
+  const recentKeyboard = keysHeldCount > 0 || (lastKeyboardAt > 0 && now - lastKeyboardAt < 25000);
   if (hasTouch && recentKeyboard) {
     return 'hybrid';
   }

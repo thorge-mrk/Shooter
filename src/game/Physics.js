@@ -1,10 +1,9 @@
-export function resolveCylinderCollisions(pos, radius, height, colliders, groundY = 0) {
-  let floorY = groundY;
+export function resolveCylinderCollisions(pos, radius, height, colliders, groundFnOrY = 0) {
+  let floorY = typeof groundFnOrY === 'function' ? groundFnOrY(pos.x, pos.z) : groundFnOrY;
   const footY = pos.y - height;
 
   for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
-    // Expand AABB horizontally by cylinder radius
     const minX = c.minX - radius;
     const maxX = c.maxX + radius;
     const minZ = c.minZ - radius;
@@ -14,18 +13,15 @@ export function resolveCylinderCollisions(pos, radius, height, colliders, ground
       continue;
     }
 
-    // If feet are near or above top of block, treat block top as walkable floor
     if (footY >= c.maxY - 0.55) {
       if (c.maxY > floorY) floorY = c.maxY;
       continue;
     }
 
-    // Otherwise check vertical overlap
     if (pos.y <= c.minY || footY >= c.maxY) {
       continue;
     }
 
-    // Push out along shallowest horizontal axis
     const dxLeft = pos.x - minX;
     const dxRight = maxX - pos.x;
     const dzBack = pos.z - minZ;
@@ -60,7 +56,6 @@ export function resolveCircleCollisionsXZ(pos, radius, colliders) {
         pos.x += (dx / dist) * push;
         pos.z += (dz / dist) * push;
       } else {
-        // Center inside AABB: push out to nearest face
         const dL = pos.x - c.minX;
         const dR = c.maxX - pos.x;
         const dB = pos.z - c.minZ;
@@ -75,10 +70,11 @@ export function resolveCircleCollisionsXZ(pos, radius, colliders) {
   }
 }
 
-export function bounceSphereAgainstColliders(pos, vel, radius, colliders, restitution = 0.45) {
+export function bounceSphereAgainstColliders(pos, vel, radius, colliders, restitution = 0.45, groundFnOrY = 0) {
   let bounced = false;
-  if (pos.y < radius) {
-    pos.y = radius;
+  const floorY = typeof groundFnOrY === 'function' ? groundFnOrY(pos.x, pos.z) : groundFnOrY;
+  if (pos.y < floorY + radius) {
+    pos.y = floorY + radius;
     if (Math.abs(vel.y) > 0.6) bounced = true;
     vel.y = -vel.y * restitution;
     vel.x *= 0.82;

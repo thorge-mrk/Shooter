@@ -15,19 +15,21 @@ const engine = new GameEngine({
 });
 
 let currentRoom = null;
+let lobbyPollTimer = null;
 
 async function refreshRooms() {
-  if (!network.db || !network.user) {
-    ui.renderRoomList([], () => {});
+  if (!network.db || !network.user || engine.isRunning) {
+    if (!network.user) ui.renderRoomList([], () => {});
     return;
   }
   try {
     const rooms = await network.listRooms();
     ui.renderRoomList(rooms, async (code) => {
+      ui.setMpFeedback('');
       try {
         await network.joinRoom(code);
       } catch (err) {
-        alert(err.message);
+        ui.setMpFeedback(err.message || 'Could not join room.');
       }
     });
   } catch (err) {
@@ -37,10 +39,18 @@ async function refreshRooms() {
 
 network.onAuthChange = (user) => {
   ui.updateFirebaseStatus(isFirebaseConfigured(), user);
+  ui.setMpFeedback('');
   if (user) {
     refreshRooms();
+    if (!lobbyPollTimer) {
+      lobbyPollTimer = setInterval(refreshRooms, 4000);
+    }
   } else {
     currentRoom = null;
+    if (lobbyPollTimer) {
+      clearInterval(lobbyPollTimer);
+      lobbyPollTimer = null;
+    }
     ui.updateWaitingRoom(null, '');
     ui.renderRoomList([], () => {});
   }
@@ -62,6 +72,8 @@ network.onRoomUpdate = (room) => {
   } else if (room.status === 'playing') {
     if (!engine.isRunning) {
       engine.startMultiplayerMatch(room, network.user);
+    } else if (room.roundStartAt && room.roundStartAt !== engine.matchStartAt) {
+      engine.resetMultiplayerRound(room);
     } else {
       engine.handleNetworkRoomUpdate(room);
     }
@@ -76,7 +88,6 @@ network.onEvent = (ev) => {
   engine.handleNetworkEvent(ev);
 };
 
-// Boot Firebase if configured
 network.initialize().then((configured) => {
   ui.updateFirebaseStatus(configured, network.user);
 });
@@ -84,14 +95,11 @@ network.initialize().then((configured) => {
 // Auth buttons
 document.getElementById('btn-google-login').addEventListener('click', async () => {
   sound.unlock();
-  if (!isFirebaseConfigured()) {
-    ui.openFirebaseModal();
-    return;
-  }
+  ui.setMpFeedback('');
   try {
     await network.signInWithGoogle();
   } catch (err) {
-    alert(err.message || 'Google Sign-In failed.');
+    ui.setMpFeedback(err.message || 'Google Sign-In failed.');
   }
 });
 
@@ -99,31 +107,18 @@ document.getElementById('btn-signout').addEventListener('click', async () => {
   await network.signOutUser();
 });
 
-// Firebase Config modal
-document.getElementById('btn-open-fb-config').addEventListener('click', () => ui.openFirebaseModal());
-document.getElementById('btn-close-fb').addEventListener('click', () => ui.closeFirebaseModal());
-document.getElementById('btn-save-fb-config').addEventListener('click', async () => {
-  if (ui.handleSaveFirebaseConfig()) {
-    const ok = await network.reloadConfig();
-    ui.updateFirebaseStatus(ok, network.user);
-  }
-});
-document.getElementById('btn-clear-fb-config').addEventListener('click', async () => {
-  ui.handleClearFirebaseConfig();
-  await network.reloadConfig();
-  ui.updateFirebaseStatus(false, null);
-});
-
 // Solo Bot Practice
 document.getElementById('btn-start-practice').addEventListener('click', () => {
   sound.unlock();
   const mapId = document.getElementById('practice-map').value;
   const botCount = Number(document.getElementById('practice-bots').value);
+  const difficulty = document.getElementById('practice-difficulty').value;
   const killLimit = Number(document.getElementById('practice-kills').value);
   engine.startPracticeMatch({
     mapId,
     botCount,
     killLimit,
+    difficulty,
     playerName: network.user?.displayName || 'Operator'
   });
 });
@@ -133,12 +128,9 @@ document.getElementById('btn-refresh-rooms').addEventListener('click', refreshRo
 
 document.getElementById('btn-create-room').addEventListener('click', async () => {
   sound.unlock();
-  if (!isFirebaseConfigured()) {
-    ui.openFirebaseModal();
-    return;
-  }
+  ui.setMpFeedback('');
   if (!network.user) {
-    alert('Please sign in with Google first to create a multiplayer room.');
+    ui.setMpFeedback('Sign in with Google first to create a room.');
     return;
   }
   const mapId = document.getElementById('mp-map').value;
@@ -146,17 +138,18 @@ document.getElementById('btn-create-room').addEventListener('click', async () =>
   try {
     await network.createRoom({ mapId, killLimit, durationSec });
   } catch (err) {
-    alert(err.message);
+    ui.setMpFeedback(err.message || 'Could not create room.');
   }
 });
 
 document.getElementById('btn-join-code').addEventListener('click', async () => {
   sound.unlock();
+  ui.setMpFeedback('');
   const code = document.getElementById('input-room-code').value;
   try {
     await network.joinRoom(code);
   } catch (err) {
-    alert(err.message);
+    ui.setMpFeedback(err.message || 'Could not join room.');
   }
 });
 
@@ -195,6 +188,7 @@ document.getElementById('btn-next-round').addEventListener('click', () => {
 document.getElementById('btn-leave-match').addEventListener('click', async () => {
   engine.quitMatch();
   if (currentRoom) await network.leaveRoom();
+  refreshRooms();
 });
 
 ui.el.weaponSlots.forEach((btn) => {
@@ -237,4 +231,5 @@ ui.el.settingSensitivity.addEventListener('input', (e) => {
 document.getElementById('btn-quit-match').addEventListener('click', async () => {
   engine.quitMatch();
   if (currentRoom) await network.leaveRoom();
+  refreshRooms();
 });

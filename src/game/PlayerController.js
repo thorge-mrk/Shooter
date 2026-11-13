@@ -9,6 +9,7 @@ export class PlayerController {
     this.onInputModeChange = onInputModeChange;
 
     this.pos = new THREE.Vector3(0, 1.7, 0);
+    this.vel = new THREE.Vector3(0, 0, 0);
     this.velY = 0;
     this.yaw = 0;
     this.pitch = 0;
@@ -52,6 +53,7 @@ export class PlayerController {
       this.touchFire = false;
       this.touchAds = false;
       this.touchMove = { x: 0, y: 0 };
+      this.vel.set(0, 0, 0);
       if (document.pointerLockElement === this.domElement) {
         document.exitPointerLock?.();
       }
@@ -80,6 +82,7 @@ export class PlayerController {
       overrideMode: this.overrideMode,
       hasTouch: this.hasTouch,
       pointerLocked: this.pointerLocked,
+      keysHeldCount: this.keys.size,
       lastKeyboardAt: this.lastKeyboardAt,
       lastMouseAt: this.lastMouseAt,
       lastTouchAt: this.lastTouchAt,
@@ -105,9 +108,9 @@ export class PlayerController {
       }
 
       this.lastKeyboardAt = performance.now();
+      this.keys.add(e.code);
       this._refreshInputMode();
 
-      this.keys.add(e.code);
       if (e.code === 'Digit1') this.onWeaponSwitch?.(0);
       else if (e.code === 'Digit2') this.onWeaponSwitch?.(1);
       else if (e.code === 'Digit3') this.onWeaponSwitch?.(2);
@@ -133,14 +136,20 @@ export class PlayerController {
       this._refreshInputMode(true);
     });
 
-    window.addEventListener('mousemove', (e) => {
+    // Only recognize genuine mouse devices via PointerEvents
+    window.addEventListener('pointermove', (e) => {
       if (!this.isActive) return;
-      // Ignore synthetic mouse events from touch taps
-      if (e.sourceCapabilities?.firesTouchEvents) return;
+      if (e.pointerType !== 'mouse') return;
+      const now = performance.now();
+      if (now - this.lastTouchAt < 1200) return;
       if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
-        this.lastMouseAt = performance.now();
+        this.lastMouseAt = now;
         this._refreshInputMode();
       }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isActive) return;
       if (this.pointerLocked) {
         const scale = 0.0021 * this.sensitivity;
         this.yaw -= e.movementX * scale;
@@ -151,6 +160,7 @@ export class PlayerController {
 
     this.domElement.addEventListener('mousedown', (e) => {
       if (!this.isActive) return;
+      if (performance.now() - this.lastTouchAt < 1000) return;
       if (this.currentMode === 'desktop' && !this.pointerLocked) {
         this.requestPointerLock();
         return;
@@ -166,7 +176,7 @@ export class PlayerController {
 
     this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Touch bindings on HUD overlay zones
+    // Floating Left Virtual Joystick (iPad / Touch)
     const moveZone = document.getElementById('touch-move-zone');
     const aimZone = document.getElementById('touch-aim-zone');
     const knob = document.getElementById('joystick-knob');
@@ -175,13 +185,33 @@ export class PlayerController {
     let moveTouchId = null;
     let moveOrigin = { x: 0, y: 0 };
 
+    const resetJoystickPosition = () => {
+      if (!base || !knob) return;
+      base.style.left = '';
+      base.style.top = '';
+      base.style.bottom = '';
+      base.classList.remove('active');
+      knob.style.transform = 'translate(0px, 0px)';
+    };
+
     if (moveZone && knob && base) {
       moveZone.addEventListener('touchstart', (e) => {
-        if (!this.isActive || moveTouchId !== null) return;
+        if (!this.isActive) return;
+        e.preventDefault();
+        if (moveTouchId !== null) return;
         const t = e.changedTouches[0];
         moveTouchId = t.identifier;
-        const rect = base.getBoundingClientRect();
-        moveOrigin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        const zoneRect = moveZone.getBoundingClientRect();
+        const relX = t.clientX - zoneRect.left;
+        const relY = t.clientY - zoneRect.top;
+
+        // Float joystick center directly beneath the thumb
+        base.style.left = `${relX - 58}px`;
+        base.style.top = `${relY - 58}px`;
+        base.style.bottom = 'auto';
+        base.classList.add('active');
+
+        moveOrigin = { x: t.clientX, y: t.clientY };
         this.lastTouchAt = performance.now();
         this._refreshInputMode();
       }, { passive: false });
@@ -191,7 +221,7 @@ export class PlayerController {
         for (const t of e.changedTouches) {
           if (t.identifier === moveTouchId) {
             e.preventDefault();
-            const maxR = 44;
+            const maxR = 46;
             const dx = t.clientX - moveOrigin.x;
             const dy = t.clientY - moveOrigin.y;
             const dist = Math.hypot(dx, dy);
@@ -200,8 +230,10 @@ export class PlayerController {
             const kx = Math.cos(angle) * clamped;
             const ky = Math.sin(angle) * clamped;
             knob.style.transform = `translate(${kx}px, ${ky}px)`;
-            this.touchMove.x = kx / maxR;
-            this.touchMove.y = ky / maxR;
+
+            const norm = dist < 4 ? 0 : clamped / maxR;
+            this.touchMove.x = Math.cos(angle) * norm;
+            this.touchMove.y = Math.sin(angle) * norm;
           }
         }
       }, { passive: false });
@@ -212,22 +244,46 @@ export class PlayerController {
             moveTouchId = null;
             this.touchMove.x = 0;
             this.touchMove.y = 0;
-            knob.style.transform = 'translate(0px, 0px)';
+            resetJoystickPosition();
           }
         }
       };
-      moveZone.addEventListener('touchend', endMove);
-      moveZone.addEventListener('touchcancel', endMove);
+      moveZone.addEventListener('touchend', endMove, { passive: false });
+      moveZone.addEventListener('touchcancel', endMove, { passive: false });
     }
 
+    // Right Aim Zone + Simultaneous Drag-to-Aim on Fire Button!
     let aimTouchId = null;
     let lastAimPos = { x: 0, y: 0 };
+
+    const startAimTouch = (touch) => {
+      if (aimTouchId !== null) return;
+      aimTouchId = touch.identifier;
+      lastAimPos = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const moveAimTouch = (touch) => {
+      if (touch.identifier !== aimTouchId) return;
+      const dx = touch.clientX - lastAimPos.x;
+      const dy = touch.clientY - lastAimPos.y;
+      lastAimPos = { x: touch.clientX, y: touch.clientY };
+      const scale = 0.0044 * this.sensitivity;
+      this.yaw -= dx * scale;
+      this.pitch -= dy * scale;
+      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+    };
+
+    const endAimTouch = (touch) => {
+      if (touch.identifier === aimTouchId) {
+        aimTouchId = null;
+      }
+    };
+
     if (aimZone) {
       aimZone.addEventListener('touchstart', (e) => {
-        if (!this.isActive || aimTouchId !== null) return;
-        const t = e.changedTouches[0];
-        aimTouchId = t.identifier;
-        lastAimPos = { x: t.clientX, y: t.clientY };
+        if (!this.isActive) return;
+        e.preventDefault();
+        startAimTouch(e.changedTouches[0]);
         this.lastTouchAt = performance.now();
         this._refreshInputMode();
       }, { passive: false });
@@ -237,26 +293,58 @@ export class PlayerController {
         for (const t of e.changedTouches) {
           if (t.identifier === aimTouchId) {
             e.preventDefault();
-            const dx = t.clientX - lastAimPos.x;
-            const dy = t.clientY - lastAimPos.y;
-            lastAimPos = { x: t.clientX, y: t.clientY };
-            const scale = 0.0042 * this.sensitivity;
-            this.yaw -= dx * scale;
-            this.pitch -= dy * scale;
-            this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+            moveAimTouch(t);
           }
         }
       }, { passive: false });
 
-      const endAim = (e) => {
+      const stopAim = (e) => {
+        for (const t of e.changedTouches) endAimTouch(t);
+      };
+      aimZone.addEventListener('touchend', stopAim, { passive: false });
+      aimZone.addEventListener('touchcancel', stopAim, { passive: false });
+    }
+
+    // FIRE button supports holding + dragging to aim simultaneously!
+    const fireBtn = document.getElementById('t-btn-fire');
+    let fireTouchId = null;
+    if (fireBtn) {
+      fireBtn.addEventListener('touchstart', (e) => {
+        if (!this.isActive) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const t = e.changedTouches[0];
+        fireTouchId = t.identifier;
+        this.touchFire = true;
+        startAimTouch(t);
+        this.lastTouchAt = performance.now();
+        this._refreshInputMode();
+      }, { passive: false });
+
+      fireBtn.addEventListener('touchmove', (e) => {
+        if (fireTouchId === null) return;
         for (const t of e.changedTouches) {
-          if (t.identifier === aimTouchId) {
-            aimTouchId = null;
+          if (t.identifier === fireTouchId) {
+            e.preventDefault();
+            e.stopPropagation();
+            moveAimTouch(t);
+          }
+        }
+      }, { passive: false });
+
+      const stopFire = (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === fireTouchId) {
+            e.preventDefault();
+            e.stopPropagation();
+            fireTouchId = null;
+            this.touchFire = false;
+            endAimTouch(t);
           }
         }
       };
-      aimZone.addEventListener('touchend', endAim);
-      aimZone.addEventListener('touchcancel', endAim);
+      fireBtn.addEventListener('touchend', stopFire, { passive: false });
+      fireBtn.addEventListener('touchcancel', stopFire, { passive: false });
     }
 
     const bindTouchBtn = (id, onDown, onUp) => {
@@ -277,7 +365,6 @@ export class PlayerController {
       el.addEventListener('touchcancel', () => onUp?.());
     };
 
-    bindTouchBtn('t-btn-fire', () => { this.touchFire = true; }, () => { this.touchFire = false; });
     bindTouchBtn('t-btn-ads', () => { this.touchAds = !this.touchAds; }, null);
     bindTouchBtn('t-btn-jump', () => { this.touchJumpQueued = true; }, null);
     bindTouchBtn('t-btn-reload', () => { this.onReload?.(); }, null);
@@ -312,13 +399,16 @@ export class PlayerController {
     return this.mouseAds || this.touchAds;
   }
 
-  updateOnFoot(dt, colliders, isAds) {
-    // Optional arrow-key aim fallback for keyboard-only play
+  updateOnFoot(dt, colliders, isAds, terrainHeightFn = 0) {
     const arrowSpeed = 2.2 * this.sensitivity;
     if (this.keys.has('ArrowLeft')) this.yaw += arrowSpeed * dt;
     if (this.keys.has('ArrowRight')) this.yaw -= arrowSpeed * dt;
     if (this.keys.has('ArrowUp')) this.pitch = Math.min(1.45, this.pitch + arrowSpeed * 0.7 * dt);
     if (this.keys.has('ArrowDown')) this.pitch = Math.max(-1.45, this.pitch - arrowSpeed * 0.7 * dt);
+
+    const prevX = this.pos.x;
+    const prevY = this.pos.y;
+    const prevZ = this.pos.z;
 
     const { forward, strafe } = this.getMovementAxes();
     const sprinting = (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && !isAds && forward > 0.2;
@@ -341,13 +431,17 @@ export class PlayerController {
     this.velY -= 22.0 * dt;
     this.pos.y += this.velY * dt;
 
-    const floorY = resolveCylinderCollisions(this.pos, 0.44, 1.7, colliders, 0);
+    const floorY = resolveCylinderCollisions(this.pos, 0.44, 1.7, colliders, terrainHeightFn);
     if (this.pos.y - 1.7 <= floorY) {
       this.pos.y = floorY + 1.7;
       this.velY = 0;
       this.onGround = true;
     } else {
       this.onGround = false;
+    }
+
+    if (dt > 0.0001) {
+      this.vel.set((this.pos.x - prevX) / dt, (this.pos.y - prevY) / dt, (this.pos.z - prevZ) / dt);
     }
 
     return Math.hypot(forward, strafe);

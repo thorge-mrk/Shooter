@@ -1,5 +1,3 @@
-import { getFirebaseConfig, saveCustomFirebaseConfig, clearCustomFirebaseConfig } from '../firebase/config.js';
-
 export class UIManager {
   constructor() {
     this.el = {
@@ -7,7 +5,7 @@ export class UIManager {
       hud: document.getElementById('hud'),
       sniperScope: document.getElementById('sniper-scope'),
       damageVignette: document.getElementById('damage-vignette'),
-      fpsBadge: document.getElementById('fps-badge'),
+      hudTelemetry: document.getElementById('hud-telemetry'),
       inputModeBadge: document.getElementById('input-mode-badge'),
       hudTimer: document.getElementById('hud-timer'),
       hudGoal: document.getElementById('hud-goal'),
@@ -52,6 +50,7 @@ export class UIManager {
       userName: document.getElementById('user-name'),
       userEmail: document.getElementById('user-email'),
       signinPrompt: document.getElementById('signin-prompt'),
+      mpFeedback: document.getElementById('mp-feedback'),
       roomList: document.getElementById('room-list'),
       waitingRoom: document.getElementById('waiting-room'),
       wrCode: document.getElementById('wr-code'),
@@ -67,11 +66,7 @@ export class UIManager {
       settingInputMode: document.getElementById('setting-input-mode'),
       settingSensitivity: document.getElementById('setting-sensitivity'),
       sensVal: document.getElementById('sens-val'),
-      settingSound: document.getElementById('setting-sound'),
-
-      firebaseModal: document.getElementById('firebase-modal'),
-      fbConfigInput: document.getElementById('fb-config-input'),
-      fbConfigError: document.getElementById('fb-config-error')
+      settingSound: document.getElementById('setting-sound')
     };
 
     this.hitmarkerTimer = null;
@@ -90,15 +85,25 @@ export class UIManager {
     this.el.hud.classList.remove('hidden');
   }
 
+  setMpFeedback(message = '') {
+    if (!message) {
+      this.el.mpFeedback.classList.add('hidden');
+      this.el.mpFeedback.textContent = '';
+    } else {
+      this.el.mpFeedback.textContent = message;
+      this.el.mpFeedback.classList.remove('hidden');
+    }
+  }
+
   updateFirebaseStatus(configured, user) {
     if (!configured) {
-      this.el.fbStatusPill.textContent = 'FIREBASE NOT CONFIGURED';
+      this.el.fbStatusPill.textContent = 'OFFLINE';
       this.el.fbStatusPill.classList.remove('online');
     } else if (user) {
-      this.el.fbStatusPill.textContent = 'GOOGLE ONLINE READY';
+      this.el.fbStatusPill.textContent = 'ONLINE';
       this.el.fbStatusPill.classList.add('online');
     } else {
-      this.el.fbStatusPill.textContent = 'SIGN IN FOR MULTIPLAYER';
+      this.el.fbStatusPill.textContent = 'SIGN IN';
       this.el.fbStatusPill.classList.remove('online');
     }
 
@@ -117,7 +122,7 @@ export class UIManager {
   renderRoomList(rooms, onJoin) {
     this.el.roomList.innerHTML = '';
     if (!rooms || rooms.length === 0) {
-      this.el.roomList.innerHTML = '<div class="room-empty">No open rooms yet — create one or enter a room code!</div>';
+      this.el.roomList.innerHTML = '<div class="room-empty">No active rooms — create one or enter a room code.</div>';
       return;
     }
 
@@ -126,8 +131,8 @@ export class UIManager {
       row.className = 'room-item';
       row.innerHTML = `
         <div>
-          <div class="room-item-title">${r.id} • ${r.mapId.toUpperCase()}</div>
-          <div class="room-item-sub">Host: ${r.hostName} • ${r.playerCount}/5 Players • First to ${r.killLimit}</div>
+          <div class="room-item-title">${r.id} · ${r.mapId.toUpperCase()}</div>
+          <div class="room-item-sub">Host: ${r.hostName} · ${r.playerCount}/5 Players · First to ${r.killLimit}</div>
         </div>
       `;
       const btn = document.createElement('button');
@@ -149,7 +154,7 @@ export class UIManager {
     this.el.waitingRoom.classList.remove('hidden');
     this.el.roomList.classList.add('hidden');
     this.el.wrCode.textContent = room.id;
-    this.el.wrMeta.textContent = `${room.mapId.toUpperCase()} • First to ${room.killLimit} Kills`;
+    this.el.wrMeta.textContent = `${room.mapId.toUpperCase()} · First to ${room.killLimit} Kills`;
 
     const players = Object.values(room.players || {});
     this.el.wrPlayers.innerHTML = '';
@@ -163,8 +168,8 @@ export class UIManager {
     const isHost = room.hostUid === localUid;
     this.el.btnStartMpMatch.classList.toggle('hidden', !isHost);
     this.el.wrWaitNote.textContent = isHost
-      ? `Players in lobby: ${players.length}/5. Start anytime!`
-      : 'Waiting for host to launch the match...';
+      ? `Lobby: ${players.length}/5 players connected.`
+      : 'Waiting for host to launch match...';
   }
 
   applyInputMode(mode, pointerLocked) {
@@ -173,21 +178,20 @@ export class UIManager {
       this.el.touchControls.classList.add('hidden');
       this.el.pointerLockHint.classList.toggle('hidden', pointerLocked);
     } else if (mode === 'hybrid') {
-      // Venge.io style: iPad hardware keyboard moves, display touch aims & shoots
       this.el.inputModeBadge.textContent = 'KB + TOUCH AIM';
       this.el.touchControls.classList.remove('hidden');
       this.el.touchMoveZone.classList.add('hidden');
       this.el.pointerLockHint.classList.add('hidden');
     } else {
-      this.el.inputModeBadge.textContent = 'TOUCH DUAL';
+      this.el.inputModeBadge.textContent = 'TOUCH';
       this.el.touchControls.classList.remove('hidden');
       this.el.touchMoveZone.classList.remove('hidden');
       this.el.pointerLockHint.classList.add('hidden');
     }
   }
 
-  updateHud({ hp, activeSlot, weaponState, grenadesCount, reloading, isScoped, moveSpread, inTank, tankHp, cannonReadyPct, coaxAmmo, nearTank, fps, timerSec, killLimit, playerCount }) {
-    this.el.fpsBadge.textContent = `${Math.round(fps)} FPS`;
+  updateHud({ hp, activeSlot, weaponState, grenadesCount, reloading, isScoped, moveSpread, inTank, tankHp, cannonReadyPct, coaxAmmo, nearTank, fps, pingMs, timerSec, killLimit, playerCount }) {
+    this.el.hudTelemetry.textContent = `${Math.round(fps)} FPS · ${Math.max(1, Math.round(pingMs || 1))} ms`;
 
     const mins = Math.floor(Math.max(0, timerSec) / 60);
     const secs = Math.floor(Math.max(0, timerSec) % 60);
@@ -202,7 +206,7 @@ export class UIManager {
     if (inTank) {
       this.el.hudTankHp.textContent = Math.max(0, Math.ceil(tankHp));
       this.el.hudTankBar.style.width = `${Math.max(0, Math.min(100, (tankHp / 350) * 100))}%`;
-      this.el.hudCannonReady.textContent = cannonReadyPct >= 1 ? 'CANNON READY' : `RELOADING ${Math.round(cannonReadyPct * 100)}%`;
+      this.el.hudCannonReady.textContent = cannonReadyPct >= 1 ? 'CANNON READY' : `RELOAD ${Math.round(cannonReadyPct * 100)}%`;
       this.el.hudCoaxAmmo.textContent = `MG ${coaxAmmo}/60`;
     }
 
@@ -270,7 +274,7 @@ export class UIManager {
   showEliminated(visible, killerName = '', secondsLeft = 3) {
     this.el.eliminationBanner.classList.toggle('hidden', !visible);
     if (visible) {
-      this.el.elimSub.textContent = `Eliminated by ${killerName} • Respawning in ${Math.ceil(secondsLeft)}s`;
+      this.el.elimSub.textContent = `Eliminated by ${killerName} · Respawning in ${Math.ceil(secondsLeft)}s`;
     }
   }
 
@@ -287,8 +291,8 @@ export class UIManager {
 
   renderScoreboard(entries, localId, { roundEnded = false, winnerName = '', canRestart = false, mapName = '' } = {}) {
     const sorted = [...entries].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
-    this.el.sbTitle.textContent = roundEnded ? 'ROUND COMPLETE' : 'MATCH SCOREBOARD';
-    this.el.sbSubtitle.textContent = `${mapName} • Free-For-All`;
+    this.el.sbTitle.textContent = roundEnded ? 'ROUND COMPLETE' : 'SCOREBOARD';
+    this.el.sbSubtitle.textContent = `${mapName} · Free-For-All`;
     this.el.sbBody.innerHTML = '';
 
     sorted.forEach((p, idx) => {
@@ -324,34 +328,5 @@ export class UIManager {
 
   closeSettings() {
     this.el.settingsModal.classList.add('hidden');
-  }
-
-  openFirebaseModal() {
-    const current = getFirebaseConfig();
-    this.el.fbConfigInput.value = current ? JSON.stringify(current, null, 2) : '';
-    this.el.fbConfigError.classList.add('hidden');
-    this.el.firebaseModal.classList.remove('hidden');
-  }
-
-  closeFirebaseModal() {
-    this.el.firebaseModal.classList.add('hidden');
-  }
-
-  handleSaveFirebaseConfig() {
-    try {
-      saveCustomFirebaseConfig(this.el.fbConfigInput.value);
-      this.el.fbConfigError.classList.add('hidden');
-      this.closeFirebaseModal();
-      return true;
-    } catch (err) {
-      this.el.fbConfigError.textContent = err.message;
-      this.el.fbConfigError.classList.remove('hidden');
-      return false;
-    }
-  }
-
-  handleClearFirebaseConfig() {
-    clearCustomFirebaseConfig();
-    this.el.fbConfigInput.value = '';
   }
 }

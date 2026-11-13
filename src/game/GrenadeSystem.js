@@ -36,7 +36,7 @@ export class GrenadeSystem {
     });
   }
 
-  update(dt, colliders, onExplode) {
+  update(dt, colliders, onExplode, terrainHeightFn = 0) {
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const g = this.grenades[i];
       g.fuse -= dt;
@@ -47,7 +47,7 @@ export class GrenadeSystem {
       g.pos.y += g.vel.y * dt;
       g.pos.z += g.vel.z * dt;
 
-      const bounced = bounceSphereAgainstColliders(g.pos, g.vel, 0.16, colliders, 0.44);
+      const bounced = bounceSphereAgainstColliders(g.pos, g.vel, 0.16, colliders, 0.44, terrainHeightFn);
       if (bounced) {
         this.soundEngine?.playGrenadeBounce();
       }
