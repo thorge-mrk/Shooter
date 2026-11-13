@@ -15,6 +15,8 @@ import {
   remove,
   onValue,
   onChildAdded,
+  onChildChanged,
+  onChildRemoved,
   onDisconnect,
   serverTimestamp
 } from 'firebase/database';
@@ -41,15 +43,25 @@ export class NetworkManager {
     this.roomId = null;
     this.isHost = false;
     this.playerDisconnectRef = null;
+    this.pingDisconnectRef = null;
     this.unsubscribers = [];
     this.lastStateSend = 0;
+    this.lastPos = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
     this.pingMs = 0;
+    this.serverTimeOffset = 0;
     this.pingTimer = null;
+    this.playersMap = {};
 
     this.onAuthChange = null;
     this.onRoomUpdate = null;
     this.onEvent = null;
+    this.onPlayerChange = null;
+    this.onPlayerRemove = null;
     this.onPlayersUpdate = null;
+  }
+
+  getServerNow() {
+    return Date.now() + this.serverTimeOffset;
   }
 
   async initialize() {
@@ -62,6 +74,11 @@ export class NetworkManager {
 
     this.auth = services.auth;
     this.db = services.db;
+
+    // Track Firebase server clock offset so all clients share a unified timeline for snapshot interpolation
+    onValue(ref(this.db, '.info/serverTimeOffset'), (snap) => {
+      this.serverTimeOffset = snap.val() || 0;
+    });
 
     try {
       await getRedirectResult(this.auth);
@@ -166,6 +183,7 @@ export class NetworkManager {
   async _joinRoomInternal(code, isHost) {
     this.roomId = code;
     this.isHost = isHost;
+    this.playersMap = {};
 
     const playerRef = ref(this.db, `rooms/${code}/players/${this.user.uid}`);
     const initialPlayer = {
@@ -186,6 +204,7 @@ export class NetworkManager {
       pitch: 0,
       weapon: 0,
       inTankId: -1,
+      t: this.getServerNow(),
       updatedAt: serverTimestamp()
     };
 
@@ -193,6 +212,11 @@ export class NetworkManager {
     this.playerDisconnectRef = onDisconnect(playerRef);
     await this.playerDisconnectRef.remove();
 
+    const pingRef = ref(this.db, `rooms/${code}/pings/${this.user.uid}`);
+    this.pingDisconnectRef = onDisconnect(pingRef);
+    await this.pingDisconnectRef.remove();
+
+    // Listen to room metadata & tanks (lightweight fields)
     const metaUnsub = onValue(ref(this.db, `rooms/${code}`), (snap) => {
       if (!snap.exists()) {
         if (this.onRoomUpdate) this.onRoomUpdate(null);
@@ -203,19 +227,38 @@ export class NetworkManager {
       if (this.onRoomUpdate) this.onRoomUpdate({ id: code, ...data });
     });
 
-    const playersUnsub = onValue(ref(this.db, `rooms/${code}/players`), (snap) => {
-      const players = snap.exists() ? snap.val() : {};
-      if (this.onPlayersUpdate) this.onPlayersUpdate(players);
+    // Per-player child listeners so only changed remote players are processed (no self-echo!)
+    const playersRef = ref(this.db, `rooms/${code}/players`);
+    const handleUpsert = (snap) => {
+      const uid = snap.key;
+      const val = snap.val();
+      if (!val) return;
+      this.playersMap[uid] = val;
+      if (uid !== this.user?.uid && this.onPlayerChange) {
+        this.onPlayerChange(uid, val);
+      }
+      if (this.onPlayersUpdate) {
+        this.onPlayersUpdate(this.playersMap);
+      }
+    };
+
+    const pAdd = onChildAdded(playersRef, handleUpsert);
+    const pChg = onChildChanged(playersRef, handleUpsert);
+    const pRem = onChildRemoved(playersRef, (snap) => {
+      const uid = snap.key;
+      delete this.playersMap[uid];
+      if (this.onPlayerRemove) this.onPlayerRemove(uid);
+      if (this.onPlayersUpdate) this.onPlayersUpdate(this.playersMap);
     });
 
-    const joinedAt = Date.now() - 1200;
+    const joinedAt = this.getServerNow() - 1200;
     const eventsUnsub = onChildAdded(ref(this.db, `rooms/${code}/events`), (snap) => {
       const ev = snap.val();
       if (!ev || (ev.ts && ev.ts < joinedAt)) return;
       if (this.onEvent) this.onEvent(ev, snap.key);
     });
 
-    this.unsubscribers.push(metaUnsub, playersUnsub, eventsUnsub);
+    this.unsubscribers.push(metaUnsub, pAdd, pChg, pRem, eventsUnsub);
     this._startPingLoop();
   }
 
@@ -225,7 +268,8 @@ export class NetworkManager {
       if (!this.db || !this.roomId || !this.user) return;
       const t0 = performance.now();
       try {
-        await set(ref(this.db, `rooms/${this.roomId}/players/${this.user.uid}/pingAt`), Date.now());
+        // Write to isolated pings/${uid} node so players/* listeners don't receive useless ping noise
+        await set(ref(this.db, `rooms/${this.roomId}/pings/${this.user.uid}`), Date.now());
         const rtt = Math.max(1, Math.round(performance.now() - t0));
         this.pingMs = this.pingMs ? Math.round(this.pingMs * 0.55 + rtt * 0.45) : rtt;
       } catch {
@@ -287,8 +331,17 @@ export class NetworkManager {
   syncPlayerState(state, force = false) {
     if (!this.db || !this.roomId || !this.user) return;
     const now = performance.now();
-    if (!force && now - this.lastStateSend < 36) return; // ~28 Hz responsive sync
+    const moved = Math.abs(state.x - this.lastPos.x) > 0.02 ||
+      Math.abs(state.y - this.lastPos.y) > 0.02 ||
+      Math.abs(state.z - this.lastPos.z) > 0.02 ||
+      Math.abs(state.yaw - this.lastPos.yaw) > 0.02 ||
+      Math.abs(state.pitch - this.lastPos.pitch) > 0.02;
+
+    const minInterval = moved ? 33 : 180; // 30 Hz when moving, 5.5 Hz heartbeat when idle
+    if (!force && now - this.lastStateSend < minInterval) return;
+
     this.lastStateSend = now;
+    this.lastPos = { x: state.x, y: state.y, z: state.z, yaw: state.yaw, pitch: state.pitch };
 
     const payload = {
       ...state,
@@ -300,7 +353,7 @@ export class NetworkManager {
       vz: round2(state.vz || 0),
       yaw: round2(state.yaw),
       pitch: round2(state.pitch),
-      updatedAt: Date.now()
+      t: this.getServerNow()
     };
 
     update(ref(this.db, `rooms/${this.roomId}/players/${this.user.uid}`), payload).catch(() => {});
@@ -322,7 +375,7 @@ export class NetworkManager {
     await set(evRef, {
       ...payload,
       senderUid: this.user.uid,
-      ts: Date.now()
+      ts: this.getServerNow()
     });
   }
 
@@ -332,10 +385,15 @@ export class NetworkManager {
       try { unsub(); } catch {}
     }
     this.unsubscribers = [];
+    this.playersMap = {};
 
     if (this.playerDisconnectRef) {
       try { await this.playerDisconnectRef.cancel(); } catch {}
       this.playerDisconnectRef = null;
+    }
+    if (this.pingDisconnectRef) {
+      try { await this.pingDisconnectRef.cancel(); } catch {}
+      this.pingDisconnectRef = null;
     }
 
     if (this.db && this.roomId && this.user) {
@@ -345,6 +403,7 @@ export class NetworkManager {
       this.isHost = false;
       try {
         await remove(ref(this.db, `rooms/${code}/players/${uid}`));
+        await remove(ref(this.db, `rooms/${code}/pings/${uid}`));
         const snap = await get(ref(this.db, `rooms/${code}/players`));
         if (!snap.exists() || snap.numChildren() === 0) {
           await remove(ref(this.db, `rooms/${code}`));

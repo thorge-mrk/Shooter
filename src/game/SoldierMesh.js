@@ -143,6 +143,19 @@ export function buildSoldierMesh(entityId, name, color = 0x3b4958, castShadows =
 
   root.add(legL, legR, upperBody);
 
+  // Seamless zero-draw-cost padded hitboxes for fair & reliable FPS hit registration
+  const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
+  const bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.38, 0.54), hitboxMat);
+  bodyHitbox.position.set(0, 0.72, 0);
+  bodyHitbox.userData = { entityType: 'player', playerId: entityId, isHead: false };
+
+  const headHitbox = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), hitboxMat);
+  headHitbox.position.set(0, 1.66, 0);
+  headHitbox.userData = { entityType: 'player', playerId: entityId, isHead: true };
+
+  root.add(bodyHitbox, headHitbox);
+  hitMeshes.push(bodyHitbox, headHitbox);
+
   const tag = createNameTagSprite(name);
   root.add(tag.sprite);
 
@@ -157,7 +170,7 @@ export function buildSoldierMesh(entityId, name, color = 0x3b4958, castShadows =
     flashTimer: 0,
     walkPhase: Math.random() * Math.PI * 2,
     hitMeshes,
-    materials: [bduMat, rigMat, accentMat, bootMat, skinMat, visorMat, gunMat, flashMat, tag.mat],
+    materials: [bduMat, rigMat, accentMat, bootMat, skinMat, visorMat, gunMat, flashMat, hitboxMat, tag.mat],
     tagTex: tag.tex
   };
 }

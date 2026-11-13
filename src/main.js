@@ -80,8 +80,16 @@ network.onRoomUpdate = (room) => {
   }
 };
 
+network.onPlayerChange = (uid, data) => {
+  engine.handleSinglePlayerChange(uid, data);
+};
+
+network.onPlayerRemove = (uid) => {
+  engine.handleSinglePlayerRemove(uid);
+};
+
 network.onPlayersUpdate = (players) => {
-  engine.handleRemotePlayersUpdate(players);
+  engine.mpPlayers = players || {};
 };
 
 network.onEvent = (ev) => {

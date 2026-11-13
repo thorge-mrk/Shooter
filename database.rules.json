@@ -25,6 +25,11 @@
             ".write": "auth != null && (auth.uid === $uid || data.parent().parent().child('hostUid').val() === auth.uid)"
           }
         },
+        "pings": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        },
         "tanks": {
           ".write": "auth != null && data.parent().child('hostUid').val() === auth.uid",
           "$tankId": {

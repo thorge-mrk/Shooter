@@ -1,73 +1,88 @@
 import * as THREE from 'three';
 import { buildSoldierMesh, animateSoldierModel } from './SoldierMesh.js';
+import { NetSnapshotBuffer, lerpAngle } from './NetSnapshotBuffer.js';
 
 const TEAM_COLORS = [0x3b82f6, 0xef4444, 0x10b981, 0xf59e0b, 0xa855f7];
-
-function lerpAngle(current, target, alpha) {
-  let diff = target - current;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return current + diff * alpha;
-}
 
 export class RemotePlayerManager {
   constructor(scene, castShadows = true) {
     this.scene = scene;
     this.castShadows = castShadows;
     this.remotes = new Map();
+    this.colorIndex = 0;
   }
 
-  syncSnapshot(playersObj, localUid) {
-    const seen = new Set();
-    const entries = Object.entries(playersObj || {});
-    const now = performance.now();
+  upsertPlayer(uid, data, localUid, serverNowMs) {
+    if (uid === localUid || !data) return;
+    const feetY = (data.y ?? 1.7) - 1.7;
+    const snapTime = typeof data.t === 'number' ? data.t : serverNowMs;
+    const snap = {
+      t: snapTime,
+      x: data.x || 0,
+      y: feetY,
+      z: data.z || 0,
+      vx: data.vx || 0,
+      vz: data.vz || 0,
+      yaw: data.yaw || 0,
+      pitch: data.pitch || 0
+    };
 
-    entries.forEach(([uid, data], index) => {
-      if (uid === localUid || !data) return;
-      seen.add(uid);
+    let entity = this.remotes.get(uid);
+    if (!entity) {
+      const color = TEAM_COLORS[this.colorIndex++ % TEAM_COLORS.length];
+      const model = buildSoldierMesh(uid, data.name || 'Operator', color, this.castShadows);
+      this.scene.add(model.root);
+      const buffer = new NetSnapshotBuffer(95);
+      buffer.push(snap);
+      entity = {
+        uid,
+        data: { ...data },
+        model,
+        buffer,
+        currentPos: new THREE.Vector3(snap.x, snap.y, snap.z),
+        currentYaw: snap.yaw,
+        currentPitch: snap.pitch
+      };
+      this.remotes.set(uid, entity);
+    } else {
+      const prevInTank = typeof entity.data.inTankId === 'number' && entity.data.inTankId >= 0;
+      const nextInTank = typeof data.inTankId === 'number' && data.inTankId >= 0;
+      const prevAlive = entity.data.alive !== false;
+      const nextAlive = data.alive !== false;
 
-      const feetY = (data.y ?? 1.7) - 1.7;
-      let entity = this.remotes.get(uid);
-      if (!entity) {
-        const color = TEAM_COLORS[index % TEAM_COLORS.length];
-        const model = buildSoldierMesh(uid, data.name || 'Operator', color, this.castShadows);
-        this.scene.add(model.root);
-        entity = {
-          uid,
-          data: { ...data },
-          model,
-          anchorPos: new THREE.Vector3(data.x || 0, feetY, data.z || 0),
-          currentPos: new THREE.Vector3(data.x || 0, feetY, data.z || 0),
-          vel: new THREE.Vector3(data.vx || 0, data.vy || 0, data.vz || 0),
-          lastPacketAt: now,
-          targetYaw: data.yaw || 0,
-          currentYaw: data.yaw || 0,
-          targetPitch: data.pitch || 0,
-          currentPitch: data.pitch || 0
-        };
-        this.remotes.set(uid, entity);
+      entity.data = { ...data };
+      const jumpDist = Math.hypot(snap.x - entity.currentPos.x, snap.z - entity.currentPos.z);
+
+      // Snap cleanly on tank exit, respawn, or long-distance teleport
+      if ((prevInTank && !nextInTank) || (!prevAlive && nextAlive) || jumpDist > 14) {
+        entity.buffer.clear(snap);
+        entity.currentPos.set(snap.x, snap.y, snap.z);
+        entity.currentYaw = snap.yaw;
+        entity.currentPitch = snap.pitch;
       } else {
-        const prevInTank = typeof entity.data.inTankId === 'number' && entity.data.inTankId >= 0;
-        const nextInTank = typeof data.inTankId === 'number' && data.inTankId >= 0;
-
-        entity.data = { ...data };
-        entity.anchorPos.set(data.x || 0, feetY, data.z || 0);
-        entity.vel.set(data.vx || 0, data.vy || 0, data.vz || 0);
-        entity.lastPacketAt = now;
-        entity.targetYaw = data.yaw || 0;
-        entity.targetPitch = data.pitch || 0;
-
-        // If player just exited a tank or respawned far away, snap cleanly so they don't slide across the map
-        if ((prevInTank && !nextInTank) || entity.currentPos.distanceTo(entity.anchorPos) > 14) {
-          entity.currentPos.copy(entity.anchorPos);
-        }
+        entity.buffer.push(snap);
       }
-    });
+    }
+  }
 
-    for (const [uid, entity] of this.remotes.entries()) {
+  removePlayer(uid) {
+    const entity = this.remotes.get(uid);
+    if (entity) {
+      this._removeEntity(entity);
+      this.remotes.delete(uid);
+    }
+  }
+
+  syncSnapshot(playersObj, localUid, serverNowMs = Date.now()) {
+    const seen = new Set();
+    for (const [uid, data] of Object.entries(playersObj || {})) {
+      if (uid === localUid || !data) continue;
+      seen.add(uid);
+      this.upsertPlayer(uid, data, localUid, serverNowMs);
+    }
+    for (const uid of this.remotes.keys()) {
       if (!seen.has(uid)) {
-        this._removeEntity(entity);
-        this.remotes.delete(uid);
+        this.removePlayer(uid);
       }
     }
   }
@@ -79,10 +94,8 @@ export class RemotePlayerManager {
     }
   }
 
-  update(dt) {
-    const now = performance.now();
-    const posAlpha = 1 - Math.exp(-11 * dt);
-    const rotAlpha = 1 - Math.exp(-14 * dt);
+  update(dt, serverNowMs = Date.now()) {
+    const smoothAlpha = 1 - Math.exp(-18 * dt);
 
     for (const entity of this.remotes.values()) {
       const alive = entity.data.alive !== false;
@@ -91,30 +104,28 @@ export class RemotePlayerManager {
 
       if (!entity.model.root.visible) continue;
 
-      // Dead-reckoning prediction capped at 180ms so high-latency players glide smoothly without warping
-      const ageSec = Math.min(0.18, Math.max(0, (now - entity.lastPacketAt) / 1000));
-      const predictedX = entity.anchorPos.x + entity.vel.x * ageSec;
-      const predictedY = entity.anchorPos.y + entity.vel.y * ageSec * 0.5;
-      const predictedZ = entity.anchorPos.z + entity.vel.z * ageSec;
+      const sampled = entity.buffer.sample(serverNowMs);
+      if (!sampled) continue;
 
       const prevX = entity.currentPos.x;
       const prevZ = entity.currentPos.z;
 
-      entity.currentPos.x += (predictedX - entity.currentPos.x) * posAlpha;
-      entity.currentPos.y += (predictedY - entity.currentPos.y) * posAlpha;
-      entity.currentPos.z += (predictedZ - entity.currentPos.z) * posAlpha;
+      entity.currentPos.x += (sampled.x - entity.currentPos.x) * smoothAlpha;
+      entity.currentPos.y += (sampled.y - entity.currentPos.y) * smoothAlpha;
+      entity.currentPos.z += (sampled.z - entity.currentPos.z) * smoothAlpha;
 
-      entity.currentYaw = lerpAngle(entity.currentYaw, entity.targetYaw, rotAlpha);
-      entity.currentPitch += (entity.targetPitch - entity.currentPitch) * rotAlpha;
+      entity.currentYaw = lerpAngle(entity.currentYaw, sampled.yaw, smoothAlpha);
+      entity.currentPitch += (sampled.pitch - entity.currentPitch) * smoothAlpha;
 
       entity.model.root.position.copy(entity.currentPos);
       entity.model.root.rotation.y = entity.currentYaw;
+      entity.model.root.updateMatrixWorld(false);
 
       const frameSpeed = dt > 0.0001
         ? Math.hypot(entity.currentPos.x - prevX, entity.currentPos.z - prevZ) / dt
         : 0;
-      const netSpeed = Math.hypot(entity.vel.x, entity.vel.z);
-      const animSpeed = Math.max(frameSpeed, netSpeed * 0.8);
+      const netSpeed = Math.hypot(sampled.vx || 0, sampled.vz || 0);
+      const animSpeed = Math.max(frameSpeed, netSpeed * 0.75);
 
       animateSoldierModel(entity.model, dt, animSpeed, entity.currentPitch, animSpeed > 0.35);
     }
@@ -124,6 +135,7 @@ export class RemotePlayerManager {
     const list = [];
     for (const entity of this.remotes.values()) {
       if (entity.model.root.visible) {
+        entity.model.root.updateMatrixWorld(true);
         list.push(...entity.model.hitMeshes);
       }
     }

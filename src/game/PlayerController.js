@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { resolveCylinderCollisions } from './Physics.js';
 import { resolveEffectiveInputMode } from './InputMode.js';
+import { RecoilSystem } from './RecoilSystem.js';
 
 export class PlayerController {
   constructor(camera, domElement, onInputModeChange) {
@@ -14,6 +15,7 @@ export class PlayerController {
     this.yaw = 0;
     this.pitch = 0;
     this.onGround = true;
+    this.recoil = new RecoilSystem();
 
     this.keys = new Set();
     this.mouseFire = false;
@@ -153,8 +155,8 @@ export class PlayerController {
       if (this.pointerLocked) {
         const scale = 0.0021 * this.sensitivity;
         this.yaw -= e.movementX * scale;
-        this.pitch -= e.movementY * scale;
-        this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+        const deltaPitch = this.recoil.absorbManualAimDelta(-e.movementY * scale);
+        this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + deltaPitch));
       }
     });
 
@@ -269,8 +271,8 @@ export class PlayerController {
       lastAimPos = { x: touch.clientX, y: touch.clientY };
       const scale = 0.0044 * this.sensitivity;
       this.yaw -= dx * scale;
-      this.pitch -= dy * scale;
-      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+      const deltaPitch = this.recoil.absorbManualAimDelta(-dy * scale);
+      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + deltaPitch));
     };
 
     const endAimTouch = (touch) => {
@@ -399,12 +401,22 @@ export class PlayerController {
     return this.mouseAds || this.touchAds;
   }
 
+  getEffectiveAngles() {
+    return {
+      pitch: Math.max(-1.45, Math.min(1.45, this.pitch + this.recoil.pitchOffset)),
+      yaw: this.yaw + this.recoil.yawOffset
+    };
+  }
+
   updateOnFoot(dt, colliders, isAds, terrainHeightFn = 0) {
     const arrowSpeed = 2.2 * this.sensitivity;
     if (this.keys.has('ArrowLeft')) this.yaw += arrowSpeed * dt;
     if (this.keys.has('ArrowRight')) this.yaw -= arrowSpeed * dt;
     if (this.keys.has('ArrowUp')) this.pitch = Math.min(1.45, this.pitch + arrowSpeed * 0.7 * dt);
-    if (this.keys.has('ArrowDown')) this.pitch = Math.max(-1.45, this.pitch - arrowSpeed * 0.7 * dt);
+    if (this.keys.has('ArrowDown')) {
+      const dp = this.recoil.absorbManualAimDelta(-arrowSpeed * 0.7 * dt);
+      this.pitch = Math.max(-1.45, this.pitch + dp);
+    }
 
     const prevX = this.pos.x;
     const prevY = this.pos.y;

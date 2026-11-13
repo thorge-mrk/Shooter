@@ -206,6 +206,7 @@ export class GameEngine {
     this.ui.showHud();
     this.ui.applyInputMode(this.controller.currentMode, this.controller.pointerLocked);
 
+    this.handleRemotePlayersUpdate(room.players || {});
     this._syncLocalState(true);
   }
 
@@ -239,7 +240,7 @@ export class GameEngine {
     this.controller.velY = 0;
     this.controller.yaw = sp.yaw || 0;
     this.controller.pitch = 0;
-    this.recoilRecoverPitch = 0;
+    this.controller.recoil.reset();
     this.hp = 100;
     this.alive = true;
     this.inTankId = -1;
@@ -292,6 +293,7 @@ export class GameEngine {
     if (slot < 0 || slot >= this.inventory.length) return;
     if (this.activeSlot !== slot) {
       this.drawDrop = 0.2;
+      this.controller.recoil.reset();
     }
     this.activeSlot = slot;
     this.reloading = false;
@@ -329,7 +331,8 @@ export class GameEngine {
     this.lastShotAt = now;
     fragSlot.mag -= 1;
 
-    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(this.controller.pitch, this.controller.yaw, 0, 'YXZ')).normalize();
+    const { pitch: aimPitch, yaw: aimYaw } = this.controller.getEffectiveAngles();
+    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(aimPitch, aimYaw, 0, 'YXZ')).normalize();
     const origin = this.controller.pos.clone().addScaledVector(dir, 0.7);
     this.grenades.throwGrenade(origin, dir, this.localId, true);
 
@@ -378,6 +381,7 @@ export class GameEngine {
       this.inTankId = near.id;
       this.reloading = false;
       this.controller.touchAds = false;
+      this.controller.recoil.reset();
       this._updateViewmodelVisibility();
       if (this.mode === 'multiplayer') {
         this.network.syncTankState(near.id, {
@@ -595,28 +599,53 @@ export class GameEngine {
       this.reloading = false;
     }
 
-    // Smooth CS2-style recoil pitch recovery when not firing
-    if (this.recoilRecoverPitch > 0 && !this.controller.isFiring()) {
-      const recover = Math.min(this.recoilRecoverPitch, dt * 0.24);
-      this.controller.pitch = Math.max(-1.45, this.controller.pitch - recover);
-      this.recoilRecoverPitch -= recover;
-    }
+    // Recover active weapon recoil 100% back to the original starting aim point once firing stops
+    const activeFiring = this.controller.isFiring() && this.alive && this.inTankId < 0;
+    this.controller.recoil.update(dt, activeFiring);
 
     let moveMag = 0;
     const activeWeapon = this.inventory[this.activeSlot];
     const isAds = this.alive && this.inTankId < 0 && this.controller.isAds();
     const terrainFn = this.mapData.terrainHeightFn;
 
+    // Substepped deterministic physics (max 1/60s per step) so 30 FPS mobile & 60/120 FPS PC behave identically
+    const FIXED_STEP = 1 / 60;
+    let remDt = dt;
+    let substeps = 0;
+    while (remDt > 0.0001 && substeps < 4) {
+      const stepDt = Math.min(FIXED_STEP, remDt);
+      remDt -= stepDt;
+      substeps++;
+
+      if (this.alive) {
+        if (this.inTankId >= 0) {
+          const tank = this.tanks.getTankById(this.inTankId);
+          if (!tank || tank.destroyed) {
+            this.inTankId = -1;
+            this._updateViewmodelVisibility();
+          } else {
+            const { forward, strafe } = this.controller.getMovementAxes();
+            this.tanks.driveTank(tank, forward, -strafe, this.controller.yaw, this.controller.pitch, this.mapData.colliders, stepDt, terrainFn);
+            this.controller.pos.set(tank.x, tank.y + 2.0, tank.z);
+          }
+        } else {
+          moveMag = Math.max(moveMag, this.controller.updateOnFoot(stepDt, this.mapData.colliders, isAds, terrainFn));
+        }
+      }
+
+      this.tanks.update(stepDt, nowMs, this.mapData.colliders, (pos, ownerId, isLocal) => {
+        this._triggerExplosion(pos, 8.2, 130, 145, ownerId, isLocal, '120MM CANNON');
+      }, terrainFn, this.localId);
+
+      this.grenades.update(stepDt, this.mapData.colliders, (pos, ownerId, isLocal) => {
+        this._triggerExplosion(pos, 7.5, 115, 115, ownerId, isLocal, 'HE-67 FRAG');
+      }, terrainFn);
+    }
+
     if (this.alive) {
       if (this.inTankId >= 0) {
         const tank = this.tanks.getTankById(this.inTankId);
-        if (!tank || tank.destroyed) {
-          this.inTankId = -1;
-          this._updateViewmodelVisibility();
-        } else {
-          const { forward, strafe } = this.controller.getMovementAxes();
-          this.tanks.driveTank(tank, forward, -strafe, this.controller.yaw, this.controller.pitch, this.mapData.colliders, dt, terrainFn);
-          this.controller.pos.set(tank.x, tank.y + 2.0, tank.z);
+        if (tank && !tank.destroyed) {
           this._updateTankChaseCamera(tank);
           this._handleTankFiring(tank, nowMs);
           if (this.mode === 'multiplayer') {
@@ -626,26 +655,17 @@ export class GameEngine {
           }
         }
       } else {
-        moveMag = this.controller.updateOnFoot(dt, this.mapData.colliders, isAds, terrainFn);
+        const { pitch: effPitch, yaw: effYaw } = this.controller.getEffectiveAngles();
         this.camera.position.copy(this.controller.pos);
-        this.camera.rotation.set(this.controller.pitch, this.controller.yaw, 0, 'YXZ');
+        this.camera.rotation.set(effPitch, effYaw, 0, 'YXZ');
         this._updateFovAndViewmodel(dt, activeWeapon, isAds, moveMag);
         this._handleOnFootFiring(nowMs, activeWeapon, isAds);
       }
     }
 
     this._updateSupplyCrates(dt, nowMs);
-
-    this.tanks.update(dt, nowMs, this.mapData.colliders, (pos, ownerId, isLocal) => {
-      this._triggerExplosion(pos, 8.2, 130, 145, ownerId, isLocal, '120MM CANNON');
-    }, terrainFn, this.localId);
-
-    this.grenades.update(dt, this.mapData.colliders, (pos, ownerId, isLocal) => {
-      this._triggerExplosion(pos, 7.5, 115, 115, ownerId, isLocal, 'HE-67 FRAG');
-    }, terrainFn);
-
     this.particles.update(dt, terrainFn);
-    this.remotes.update(dt);
+    this.remotes.update(dt, this.mode === 'multiplayer' ? this.network.getServerNow() : nowMs);
 
     if (this.mode === 'practice') {
       this._updateBots(dt, nowMs);
@@ -707,9 +727,10 @@ export class GameEngine {
   }
 
   _updateFovAndViewmodel(dt, weaponState, isAds, moveMag) {
-    const targetFov = isAds ? (weaponState?.spec.adsFov || 58) : 78;
-    if (Math.abs(this.camera.fov - targetFov) > 0.1) {
-      this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 14);
+    const punchFov = (this.controller.recoil.cameraPunch || 0) * 80;
+    const targetFov = (isAds ? (weaponState?.spec.adsFov || 58) : 78) + punchFov;
+    if (Math.abs(this.camera.fov - targetFov) > 0.08) {
+      this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 16);
       this.camera.updateProjectionMatrix();
     }
 
@@ -777,11 +798,12 @@ export class GameEngine {
     this.sound.playShot(weaponState.spec.id, 1.0);
     this.vmFlashTimer = 0.055;
 
-    // IMPORTANT: Capture exact aim ray BEFORE applying recoil kick so Sniper & Rifle shoot dead-center on crosshair!
+    // Capture exact rendered crosshair aim ray BEFORE applying recoil kick
     const spread = isAds ? weaponState.spec.spreadAds : weaponState.spec.spreadHip;
+    const { pitch: aimPitch, yaw: aimYaw } = this.controller.getEffectiveAngles();
     const origin = this.camera.position.clone();
     const baseDir = new THREE.Vector3(0, 0, -1)
-      .applyEuler(new THREE.Euler(this.controller.pitch, this.controller.yaw, 0, 'YXZ'))
+      .applyEuler(new THREE.Euler(aimPitch, aimYaw, 0, 'YXZ'))
       .normalize();
     const muzzleStart = origin.clone().addScaledVector(baseDir, 0.55);
     muzzleStart.y -= 0.1;
@@ -842,12 +864,12 @@ export class GameEngine {
       }
     }
 
-    // Apply visual recoil AFTER shot raycast completes
+    // Apply recoil kick to offset layer (automatically recovers 100% back to original aim when firing stops)
     this.recoilOffset = Math.min(0.085, this.recoilOffset + 0.034);
-    const pitchKick = weaponState.spec.recoilPitch * (isAds ? 0.55 : 1);
-    this.controller.pitch = Math.min(1.45, this.controller.pitch + pitchKick);
-    this.recoilRecoverPitch = Math.min(0.16, this.recoilRecoverPitch + pitchKick * 0.78);
-    this.controller.yaw += (Math.random() - 0.5) * weaponState.spec.recoilYaw;
+    const pitchKick = weaponState.spec.recoilPitch * (isAds ? 0.58 : 1);
+    const yawKick = (Math.random() - 0.5) * 2 * weaponState.spec.recoilYaw * (isAds ? 0.6 : 1);
+    const punch = weaponState.spec.id === 'sniper' ? 0.032 : weaponState.spec.id === 'shotgun' ? 0.028 : 0.012;
+    this.controller.recoil.addKick(pitchKick, yawKick, punch);
 
     if (weaponState.mag === 0 && weaponState.reserve > 0) {
       this.startReload();

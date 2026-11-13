@@ -99,6 +99,7 @@ export class BotManager {
     const out = [];
     for (const bot of this.bots) {
       if (bot.alive && bot.inTankId < 0) {
+        bot.model.root.updateMatrixWorld(true);
         out.push(...bot.model.hitMeshes);
       }
     }

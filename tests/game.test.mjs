@@ -7,6 +7,8 @@ import {
 } from '../src/game/Physics.js';
 import { resolveEffectiveInputMode } from '../src/game/InputMode.js';
 import { getTerrainHeight } from '../src/game/TerrainMath.js';
+import { NetSnapshotBuffer, lerpAngle } from '../src/game/NetSnapshotBuffer.js';
+import { RecoilSystem } from '../src/game/RecoilSystem.js';
 
 test('resolveCylinderCollisions pushes player out of wall horizontally', () => {
   const colliders = [{ minX: 2, maxX: 4, minY: 0, maxY: 3, minZ: -2, maxZ: 2 }];
@@ -88,4 +90,41 @@ test('getTerrainHeight produces flat harbor dock and undulating hills on desert 
   const snowHeights = [getTerrainHeight('snow', 20, 20), getTerrainHeight('snow', -22, -24)];
   assert.ok(desertHeights.some((h) => h > 0.5));
   assert.ok(snowHeights.some((h) => h > 0.5));
+});
+
+test('NetSnapshotBuffer interpolates smoothly without overshooting or teleporting', () => {
+  const buf = new NetSnapshotBuffer(100);
+  buf.push({ t: 1000, x: 0, y: 0, z: 0, vx: 10, vz: 0, yaw: -Math.PI + 0.1, pitch: 0 });
+  buf.push({ t: 1100, x: 10, y: 0, z: 0, vx: 10, vz: 0, yaw: Math.PI - 0.1, pitch: 0.2 });
+
+  // Render at 1150ms -> targetTime = 1050ms -> exact midpoint between 1000 and 1100
+  const mid = buf.sample(1150);
+  assert.ok(Math.abs(mid.x - 5) < 1e-6);
+  assert.ok(Math.abs(mid.pitch - 0.1) < 1e-6);
+  // Shortest-arc angle wraparound stays near PI/-PI instead of wrapping through 0
+  assert.ok(Math.abs(Math.abs(mid.yaw) - Math.PI) < 0.05);
+
+  // Far ahead renderTime caps damped extrapolation at 65ms lead so strafes don't teleport
+  const capped = buf.sample(1600);
+  assert.ok(capped.x > 10 && capped.x < 10.5);
+});
+
+test('RecoilSystem returns 100% back to origin after firing stops and supports downward control', () => {
+  const recoil = new RecoilSystem();
+  recoil.addKick(0.06, 0.02);
+  assert.ok(recoil.pitchOffset > 0.05);
+
+  // Manual downward pull counteracts active recoil first without pushing base pitch below origin
+  const leftover = recoil.absorbManualAimDelta(-0.02);
+  assert.equal(leftover, 0);
+  assert.ok(Math.abs(recoil.pitchOffset - 0.04) < 1e-6);
+
+  // After stopping fire, simulate ~1 second of frames -> offset decays cleanly back to exact 0
+  for (let i = 0; i < 60; i++) {
+    recoil.update(1 / 60, false);
+  }
+  assert.equal(recoil.pitchOffset, 0);
+  assert.equal(recoil.yawOffset, 0);
+  assert.equal(recoil.cameraPunch, 0);
+  assert.ok(Math.abs(lerpAngle(0, 0, 1)) === 0);
 });
